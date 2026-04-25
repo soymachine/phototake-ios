@@ -72,8 +72,8 @@ final class GalleryStore: ObservableObject {
         let extent = image.extent
         let scale = min(maxPx / extent.width, maxPx / extent.height, 1)
         let thumb = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        return context.jpegRepresentation(of: thumb,
-                                          colorSpace: CGColorSpaceCreateDeviceRGB())
+        guard let cg = context.createCGImage(thumb, from: thumb.extent) else { return nil }
+        return UIImage(cgImage: cg).jpegData(compressionQuality: 0.75)
     }
 }
 

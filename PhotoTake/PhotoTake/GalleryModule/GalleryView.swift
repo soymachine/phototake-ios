@@ -3,7 +3,6 @@ import SwiftUI
 struct GalleryView: View {
     @EnvironmentObject var store: GalleryStore
     @State private var selectedItem: GalleryItem?
-    @State private var showingDetail = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 2),
@@ -12,34 +11,37 @@ struct GalleryView: View {
     ]
 
     var body: some View {
-        Group {
-            if store.items.isEmpty {
-                emptyState
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: 2) {
-                        ForEach(store.items) { item in
-                            ThumbnailCell(item: item)
-                                .onTapGesture {
-                                    selectedItem = item
-                                    showingDetail = true
-                                }
+        ZStack {
+            Group {
+                if store.items.isEmpty {
+                    emptyState
+                } else {
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 2) {
+                            ForEach(store.items) { item in
+                                ThumbnailCell(item: item)
+                                    .onTapGesture { selectedItem = item }
+                            }
                         }
                     }
                 }
             }
+            .background(DS.Color.background.ignoresSafeArea())
+
+            // Inline detail overlay — no sheet, no NavigationStack
+            if let item = selectedItem {
+                GalleryDetailOverlay(item: item, onDismiss: { selectedItem = nil })
+                    .transition(.opacity)
+                    .zIndex(10)
+            }
         }
-        .background(DS.Color.background.ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.2), value: selectedItem?.id)
         .navigationTitle("Gallery")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(DS.Color.background, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .sheet(isPresented: $showingDetail) {
-            if let item = selectedItem {
-                GalleryDetailView(item: item)
-                    .environmentObject(store)
-            }
-        }
+        // Hide nav bar while detail is open so our custom bar is the only chrome
+        .toolbar(selectedItem == nil ? .visible : .hidden, for: .navigationBar)
     }
 
     private var emptyState: some View {
@@ -59,6 +61,8 @@ struct GalleryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+
+// MARK: - Thumbnail cell
 
 struct ThumbnailCell: View {
     let item: GalleryItem
@@ -81,50 +85,59 @@ struct ThumbnailCell: View {
     }
 }
 
-struct GalleryDetailView: View {
+// MARK: - Detail overlay (inline, no sheet)
+
+struct GalleryDetailOverlay: View {
     let item: GalleryItem
+    let onDismiss: () -> Void
+
     @EnvironmentObject var store: GalleryStore
-    @Environment(\.dismiss) var dismiss
     @State private var fullResImage: UIImage? = nil
     @State private var showShareSheet = false
 
-    // Computed so it re-evaluates every render: shows full-res when loaded,
-    // always falls back to thumbnail (already in memory) — never nil if item has thumbData.
-    private var displayImage: UIImage? {
+    // Thumbnail decoded directly from in-memory Data — always available synchronously.
+    // fullResImage replaces it once the background load completes.
+    private var shownImage: UIImage? {
         fullResImage ?? item.thumbData.flatMap { UIImage(data: $0) }
     }
 
     var body: some View {
         ZStack(alignment: .top) {
-            DS.Color.background
-                .ignoresSafeArea()
+            DS.Color.background.ignoresSafeArea()
 
-            if let img = displayImage {
+            if let img = shownImage {
                 Image(uiImage: img)
                     .resizable()
                     .scaledToFit()
                     .padding(DS.Spacing.md)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .animation(.easeInOut(duration: 0.2), value: fullResImage != nil)
             } else {
                 ProgressView()
                     .tint(DS.Color.accent)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            // Custom top bar
+            // Top bar
             HStack {
-                Button("Close") { dismiss() }
-                    .foregroundStyle(DS.Color.accent)
-                    .font(DS.Font.mono)
-                    .padding(.leading, 20)
+                Button(action: onDismiss) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                    Text("Gallery")
+                        .font(DS.Font.mono)
+                }
+                .foregroundStyle(DS.Color.accent)
+                .padding(.leading, 16)
+
                 Spacer()
+
                 Menu {
                     Button(action: { showShareSheet = true }) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
                     Button(role: .destructive, action: {
                         store.delete(item)
-                        dismiss()
+                        onDismiss()
                     }) {
                         Label("Delete", systemImage: "trash")
                     }
@@ -140,6 +153,7 @@ struct GalleryDetailView: View {
         }
         .preferredColorScheme(.dark)
         .task {
+            guard fullResImage == nil else { return }
             let url = item.fullResURL
             let loaded: UIImage? = await Task.detached(priority: .userInitiated) {
                 guard let data = try? Data(contentsOf: url) else { return nil }
@@ -148,10 +162,12 @@ struct GalleryDetailView: View {
             if let loaded { fullResImage = loaded }
         }
         .sheet(isPresented: $showShareSheet) {
-            if let img = displayImage { ShareSheet(items: [img]) }
+            if let img = shownImage { ShareSheet(items: [img]) }
         }
     }
 }
+
+// MARK: - Share sheet
 
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
