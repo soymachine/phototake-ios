@@ -91,8 +91,11 @@ struct LoupeView: View {
                 .resizable()
                 .frame(width: viewSize.width * zoom,
                        height: viewSize.height * zoom)
-                .offset(x: -(focalPoint.x * zoom) + diameter / 2,
-                        y: -(focalPoint.y * zoom) + diameter / 2)
+                // Shift so that focalPoint lands at the center (diameter/2, diameter/2) of the loupe.
+                // The image (viewSize*zoom) is centered in the ZStack by default; its center maps to
+                // viewSize/2 in source coords. Offset = zoom*(viewSize/2 - focalPoint).
+                .offset(x: zoom * (viewSize.width  / 2 - focalPoint.x),
+                        y: zoom * (viewSize.height / 2 - focalPoint.y))
             // Crosshair
             Path { p in
                 p.move(to: CGPoint(x: diameter / 2, y: diameter / 2 - 10))

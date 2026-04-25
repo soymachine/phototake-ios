@@ -90,17 +90,15 @@ struct GalleryDetailView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            GeometryReader { geo in
                 if let img = image {
-                    ScrollView([.horizontal, .vertical]) {
-                        Image(uiImage: img)
-                            .resizable()
-                            .scaledToFit()
-                            .padding()
-                    }
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: geo.size.width, height: geo.size.height)
                 } else {
                     ProgressView().tint(DS.Color.accent)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
             .background(DS.Color.background.ignoresSafeArea())
