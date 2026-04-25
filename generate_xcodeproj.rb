@@ -22,6 +22,7 @@ SOURCES = %w[
   UI/DesignSystem.swift
   UI/EditView.swift
   UI/ScanView.swift
+  UI/CropAdjustView.swift
   UI/ContentView.swift
 ]
 

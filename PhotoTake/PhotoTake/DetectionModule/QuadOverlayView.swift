@@ -3,6 +3,7 @@ import SwiftUI
 struct QuadOverlayView: View {
     @Binding var corners: [CGPoint]
     let viewSize: CGSize
+    var isInteractive: Bool = true
     var animated: Bool = true
     var latestFrame: UIImage? = nil
 
@@ -10,28 +11,26 @@ struct QuadOverlayView: View {
 
     var body: some View {
         ZStack {
-            quadPath
-                .fill(Color.yellow.opacity(0.10))
+            quadPath.fill(Color.yellow.opacity(0.10))
+            quadPath.stroke(Color.yellow, lineWidth: 2)
 
-            quadPath
-                .stroke(Color.yellow, lineWidth: 2)
-
-            ForEach(corners.indices, id: \.self) { i in
-                handle(for: i)
-            }
-
-            // Loupe — positioned above the dragged handle
-            if let idx = draggingIndex, corners.indices.contains(idx) {
-                LoupeView(image: latestFrame,
-                          focalPoint: corners[idx],
-                          viewSize: viewSize)
-                    .position(loupePosition(for: corners[idx]))
-                    .transition(.opacity)
-                    .zIndex(10)
+            if isInteractive {
+                ForEach(corners.indices, id: \.self) { i in
+                    handle(for: i)
+                }
+                if let idx = draggingIndex, corners.indices.contains(idx) {
+                    LoupeView(image: latestFrame,
+                              focalPoint: corners[idx],
+                              viewSize: viewSize)
+                        .position(loupePosition(for: corners[idx]))
+                        .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                        .zIndex(10)
+                }
             }
         }
         .frame(width: viewSize.width, height: viewSize.height)
         .animation(animated ? .easeOut(duration: 0.15) : nil, value: corners)
+        .animation(.easeOut(duration: 0.15), value: draggingIndex)
     }
 
     private func handle(for index: Int) -> some View {
@@ -43,16 +42,13 @@ struct QuadOverlayView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        let clamped = CGPoint(
+                        corners[index] = CGPoint(
                             x: max(0, min(viewSize.width, value.location.x)),
                             y: max(0, min(viewSize.height, value.location.y))
                         )
-                        corners[index] = clamped
                         draggingIndex = index
                     }
-                    .onEnded { _ in
-                        draggingIndex = nil
-                    }
+                    .onEnded { _ in draggingIndex = nil }
             )
     }
 
@@ -68,13 +64,16 @@ struct QuadOverlayView: View {
     }
 
     private func loupePosition(for point: CGPoint) -> CGPoint {
-        let loupeDiameter: CGFloat = 96
-        let gap: CGFloat = 24
-        let x = max(loupeDiameter / 2, min(viewSize.width - loupeDiameter / 2, point.x))
-        let y = max(loupeDiameter / 2 + gap, point.y - 28 - gap)
-        return CGPoint(x: x, y: y)
+        let d: CGFloat = 96
+        let gap: CGFloat = 22
+        return CGPoint(
+            x: max(d / 2, min(viewSize.width - d / 2, point.x)),
+            y: max(d / 2 + gap, point.y - 28 - gap)
+        )
     }
 }
+
+// MARK: - Loupe
 
 struct LoupeView: View {
     let image: UIImage?
@@ -87,7 +86,6 @@ struct LoupeView: View {
     var body: some View {
         ZStack {
             Color.black
-
             if let image {
                 Image(uiImage: image)
                     .resizable()
@@ -96,7 +94,6 @@ struct LoupeView: View {
                     .offset(x: -(focalPoint.x * zoom) + diameter / 2,
                             y: -(focalPoint.y * zoom) + diameter / 2)
             }
-
             // Crosshair
             Path { p in
                 p.move(to: CGPoint(x: diameter / 2, y: diameter / 2 - 10))
