@@ -24,8 +24,9 @@ struct CameraPreviewView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: MTKView, context ctx: Context) {
-        session.onFrame = { [weak ctx] pixelBuffer in
-            ctx?.coordinator.currentPixelBuffer = pixelBuffer
+        let coordinator = ctx.coordinator
+        session.onFrame = { [weak coordinator] pixelBuffer in
+            coordinator?.currentPixelBuffer = pixelBuffer
         }
     }
 

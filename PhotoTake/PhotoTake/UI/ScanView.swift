@@ -148,8 +148,8 @@ struct ScanView: View {
     private func capture() {
         guard !detectedCorners.isEmpty else { return }
 
-        cameraSession.capturePhoto { [weak self] pixelBuffer in
-            guard let self, let pixelBuffer else { return }
+        cameraSession.capturePhoto { pixelBuffer in
+            guard let pixelBuffer else { return }
             let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
             let imageSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer),
                                   height: CVPixelBufferGetHeight(pixelBuffer))
