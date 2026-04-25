@@ -96,21 +96,12 @@ struct LoupeView: View {
                 // viewSize/2 in source coords. Offset = zoom*(viewSize/2 - focalPoint).
                 .offset(x: zoom * (viewSize.width  / 2 - focalPoint.x),
                         y: zoom * (viewSize.height / 2 - focalPoint.y))
-            // Crosshair — white shadow first for contrast, then yellow on top
-            Path { p in
-                p.move(to: CGPoint(x: diameter / 2, y: diameter / 2 - 14))
-                p.addLine(to: CGPoint(x: diameter / 2, y: diameter / 2 + 14))
-                p.move(to: CGPoint(x: diameter / 2 - 14, y: diameter / 2))
-                p.addLine(to: CGPoint(x: diameter / 2 + 14, y: diameter / 2))
-            }
-            .stroke(Color.white.opacity(0.5), lineWidth: 3)
-            Path { p in
-                p.move(to: CGPoint(x: diameter / 2, y: diameter / 2 - 14))
-                p.addLine(to: CGPoint(x: diameter / 2, y: diameter / 2 + 14))
-                p.move(to: CGPoint(x: diameter / 2 - 14, y: diameter / 2))
-                p.addLine(to: CGPoint(x: diameter / 2 + 14, y: diameter / 2))
-            }
-            .stroke(Color.yellow, lineWidth: 1.5)
+            // Crosshair — Rectangle views are always centered in the ZStack,
+            // unlike Path which has its own coordinate system and gets clipped.
+            Color.white.opacity(0.4).frame(width: 28, height: 3)   // horizontal shadow
+            Color.white.opacity(0.4).frame(width: 3, height: 28)   // vertical shadow
+            Color.yellow.frame(width: 28, height: 1.5)             // horizontal
+            Color.yellow.frame(width: 1.5, height: 28)             // vertical
         }
         .frame(width: diameter, height: diameter)
         .clipShape(Circle())
