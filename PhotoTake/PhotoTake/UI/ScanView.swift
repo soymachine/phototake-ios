@@ -65,6 +65,7 @@ struct ScanView: View {
             CameraPreviewView(session: cameraSession, ciContext: ciContext)
                 .onAppear {
                     overlaySize = geo.size
+                    cameraSession.start()
                     setupFrameProcessing()
                 }
                 .onChange(of: geo.size) { _, s in overlaySize = s }

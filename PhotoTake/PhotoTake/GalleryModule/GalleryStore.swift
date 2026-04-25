@@ -31,7 +31,12 @@ final class GalleryStore: ObservableObject {
                 let id = UUID().uuidString
                 let url = capturedDir.appendingPathComponent("\(id).heic")
 
-                guard let data = context.heifRepresentation(of: image,
+                // Normalize extent origin to (0,0) — heifRepresentation requires it
+                let extent = image.extent
+                let normalized = extent.origin == .zero ? image :
+                    image.transformed(by: CGAffineTransform(translationX: -extent.origin.x,
+                                                             y: -extent.origin.y))
+                guard let data = context.heifRepresentation(of: normalized,
                                                             format: .RGBA8,
                                                             colorSpace: CGColorSpaceCreateDeviceRGB())
                 else { throw GalleryError.encodingFailed }

@@ -18,8 +18,9 @@ struct QuadOverlayView: View {
                 ForEach(corners.indices, id: \.self) { i in
                     handle(for: i)
                 }
-                if let idx = draggingIndex, corners.indices.contains(idx) {
-                    LoupeView(image: latestFrame,
+                if let idx = draggingIndex, corners.indices.contains(idx),
+                   let frame = latestFrame {
+                    LoupeView(image: frame,
                               focalPoint: corners[idx],
                               viewSize: viewSize)
                         .position(loupePosition(for: corners[idx]))
@@ -76,7 +77,7 @@ struct QuadOverlayView: View {
 // MARK: - Loupe
 
 struct LoupeView: View {
-    let image: UIImage?
+    let image: UIImage
     let focalPoint: CGPoint
     let viewSize: CGSize
 
@@ -86,16 +87,12 @@ struct LoupeView: View {
     var body: some View {
         ZStack {
             Color.black
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .frame(width: viewSize.width * zoom,
-                           height: viewSize.height * zoom)
-                    .offset(x: -(focalPoint.x * zoom) + diameter / 2,
-                            y: -(focalPoint.y * zoom) + diameter / 2)
-            } else {
-                ProgressView().tint(.yellow)
-            }
+            Image(uiImage: image)
+                .resizable()
+                .frame(width: viewSize.width * zoom,
+                       height: viewSize.height * zoom)
+                .offset(x: -(focalPoint.x * zoom) + diameter / 2,
+                        y: -(focalPoint.y * zoom) + diameter / 2)
             // Crosshair
             Path { p in
                 p.move(to: CGPoint(x: diameter / 2, y: diameter / 2 - 10))
