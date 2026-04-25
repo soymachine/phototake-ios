@@ -93,6 +93,8 @@ struct LoupeView: View {
                            height: viewSize.height * zoom)
                     .offset(x: -(focalPoint.x * zoom) + diameter / 2,
                             y: -(focalPoint.y * zoom) + diameter / 2)
+            } else {
+                ProgressView().tint(.yellow)
             }
             // Crosshair
             Path { p in

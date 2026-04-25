@@ -10,57 +10,78 @@ struct ScanView: View {
     @State private var overlaySize: CGSize = .zero
     @State private var detectionThrottle = ThrottleTimer(interval: 0.3)
 
-    // Post-capture navigation
+    // Post-capture state
     @State private var rawCapturedImage: CIImage?
+    @State private var correctedCIImage: CIImage?
     @State private var capturedNormalizedCorners: [CGPoint] = []
+    @State private var capturedPreviewUIImage: UIImage?
+
+    // Navigation
     @State private var showCrop = false
+    @State private var showEdit = false
 
     let ciContext: CIContext
 
     var body: some View {
-        ZStack {
+        // GeometryReader ignores safe areas → geo.size = full screen
+        GeometryReader { geo in
             Color.black
 
-            GeometryReader { geo in
-                CameraPreviewView(session: cameraSession, ciContext: ciContext)
-                    .onAppear { overlaySize = geo.size }
-                    .onChange(of: geo.size) { _, s in overlaySize = s }
+            CameraPreviewView(session: cameraSession, ciContext: ciContext)
+                .onAppear {
+                    overlaySize = geo.size
+                    setupFrameProcessing()
+                }
+                .onChange(of: geo.size) { _, s in overlaySize = s }
 
-                // Visual-only quad — not interactive
-                if hasDetection {
-                    QuadOverlayView(
-                        corners: $detectedCorners,
-                        viewSize: geo.size,
-                        isInteractive: false
-                    )
-                    .allowsHitTesting(false)
+            // Visual-only detection quad (hidden while preview is showing)
+            if hasDetection && capturedPreviewUIImage == nil {
+                QuadOverlayView(
+                    corners: $detectedCorners,
+                    viewSize: geo.size,
+                    isInteractive: false
+                )
+                .allowsHitTesting(false)
+            }
+
+            // Shutter bar — only when no preview
+            if capturedPreviewUIImage == nil {
+                VStack {
+                    Spacer()
+                    shutterBar
+                        .padding(.bottom, geo.safeAreaInsets.bottom)
                 }
             }
+
+            // Capture preview overlay
+            if let previewImg = capturedPreviewUIImage {
+                capturePreviewOverlay(previewImg, safeBottom: geo.safeAreaInsets.bottom)
+                    .transition(.opacity)
+            }
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea()                 // ← full screen, including behind status bar
+        .background(Color.black.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) { shutterBar }
-        .onAppear {
-            cameraSession.start()
-            setupFrameProcessing()
-        }
         .onDisappear { cameraSession.stop() }
         .onReceive(NotificationCenter.default.publisher(
-            for: UIApplication.willResignActiveNotification)) { _ in
-            cameraSession.stop()
-        }
+            for: UIApplication.willResignActiveNotification)) { _ in cameraSession.stop() }
         .onReceive(NotificationCenter.default.publisher(
             for: UIApplication.didBecomeActiveNotification)) { _ in
             cameraSession.start()
             setupFrameProcessing()
         }
         .navigationDestination(isPresented: $showCrop) {
-            if let img = rawCapturedImage {
+            if let raw = rawCapturedImage {
                 CropAdjustView(
-                    rawImage: img,
+                    rawImage: raw,
                     initialNormalizedCorners: capturedNormalizedCorners,
                     ciContext: ciContext
                 )
+            }
+        }
+        .navigationDestination(isPresented: $showEdit) {
+            if let img = correctedCIImage {
+                EditView(capturedImage: img, ciContext: ciContext)
             }
         }
     }
@@ -78,8 +99,76 @@ struct ScanView: View {
             }
             Spacer()
         }
-        .padding(.vertical, 14)
-        .background(.ultraThinMaterial)
+        .padding(.top, 14)
+        .padding(.bottom, 8)
+        .background(.ultraThinMaterial.ignoresSafeArea())
+    }
+
+    // MARK: - Capture preview overlay
+
+    private func capturePreviewOverlay(_ image: UIImage, safeBottom: CGFloat) -> some View {
+        ZStack {
+            Color.black.opacity(0.82).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 20)
+
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 24)
+                    .shadow(color: .black.opacity(0.5), radius: 12)
+
+                Spacer(minLength: 20)
+
+                // Action buttons
+                HStack(spacing: 12) {
+                    // Retake
+                    Button {
+                        withAnimation { capturedPreviewUIImage = nil }
+                    } label: {
+                        Label("Retake", systemImage: "arrow.counterclockwise")
+                            .font(DS.Font.mono)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(DS.Color.surfaceSecondary)
+                            .foregroundStyle(DS.Color.textPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+                    }
+
+                    // Adjust corners
+                    Button {
+                        withAnimation { capturedPreviewUIImage = nil }
+                        showCrop = true
+                    } label: {
+                        Label("Adjust", systemImage: "crop")
+                            .font(DS.Font.mono)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(DS.Color.surfaceSecondary)
+                            .foregroundStyle(DS.Color.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+                    }
+
+                    // Continue to edit
+                    Button {
+                        withAnimation { capturedPreviewUIImage = nil }
+                        showEdit = true
+                    } label: {
+                        Label("Use", systemImage: "checkmark")
+                            .font(DS.Font.mono)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(DS.Color.accent)
+                            .foregroundStyle(DS.Color.background)
+                            .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, max(safeBottom, 24))
+            }
+        }
     }
 
     // MARK: - Frame processing
@@ -103,28 +192,41 @@ struct ScanView: View {
     private func capture() {
         let corners = detectedCorners.isEmpty ? fullFrameCorners : detectedCorners
         let size = overlaySize
-        let normalizedCorners = corners.map { CGPoint(x: $0.x / size.width, y: $0.y / size.height) }
+        let normalized = corners.map { CGPoint(x: $0.x / size.width, y: $0.y / size.height) }
+        let ctx = ciContext
 
-        cameraSession.capturePhoto { pixelBuffer in
-            guard let pixelBuffer else { return }
-            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-            DispatchQueue.main.async {
-                rawCapturedImage = ciImage
-                capturedNormalizedCorners = normalizedCorners
-                showCrop = true
-            }
+        Task {
+            // Bridge callback to async/await
+            guard let pixelBuffer = await withCheckedContinuation(
+                { (cont: CheckedContinuation<CVPixelBuffer?, Never>) in
+                    cameraSession.capturePhoto { buf in cont.resume(returning: buf) }
+                })
+            else { return }
+
+            let raw = CIImage(cvPixelBuffer: pixelBuffer)
+            let imgSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer),
+                                 height: CVPixelBufferGetHeight(pixelBuffer))
+            let pixelCorners = PerspectiveCorrector.viewCornersToImagePixels(
+                corners: corners, viewSize: size, imageSize: imgSize)
+            let corrected = PerspectiveCorrector.correct(image: raw, quad: pixelCorners) ?? raw
+
+            // Render preview off main thread
+            let previewImg: UIImage? = await Task.detached {
+                guard let cg = ctx.createCGImage(corrected, from: corrected.extent) else { return nil }
+                return UIImage(cgImage: cg)
+            }.value
+
+            rawCapturedImage = raw
+            correctedCIImage = corrected
+            capturedNormalizedCorners = normalized
+            withAnimation { capturedPreviewUIImage = previewImg }
         }
     }
 
     private var fullFrameCorners: [CGPoint] {
-        let s = overlaySize
-        let inset: CGFloat = 24
-        return [
-            CGPoint(x: inset, y: inset),
-            CGPoint(x: s.width - inset, y: inset),
-            CGPoint(x: s.width - inset, y: s.height - inset),
-            CGPoint(x: inset, y: s.height - inset)
-        ]
+        let s = overlaySize, i: CGFloat = 24
+        return [CGPoint(x: i, y: i), CGPoint(x: s.width-i, y: i),
+                CGPoint(x: s.width-i, y: s.height-i), CGPoint(x: i, y: s.height-i)]
     }
 }
 

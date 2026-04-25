@@ -46,6 +46,7 @@ struct CropAdjustView: View {
                 corners = initialNormalizedCorners.map {
                     CGPoint(x: $0.x * size.width, y: $0.y * size.height)
                 }
+                Task { loupeImage = await prepareLoupeImage(viewSize: size) }
             }
         }
         .ignoresSafeArea()
