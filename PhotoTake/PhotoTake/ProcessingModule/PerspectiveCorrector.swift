@@ -1,4 +1,5 @@
 import CoreImage
+import Vision
 
 enum PerspectiveCorrector {
     // quad: [TL, TR, BR, BL] in CIImage pixel coords (origin bottom-left)
@@ -14,8 +15,6 @@ enum PerspectiveCorrector {
     }
 
     // Convert view-space corners (UIKit, origin top-left) to CIImage pixel coords
-    // imageSize: actual pixel dimensions of the CIImage
-    // viewSize: SwiftUI view dimensions used for the overlay
     static func viewCornersToImagePixels(
         corners: [CGPoint],
         viewSize: CGSize,
@@ -31,11 +30,11 @@ enum PerspectiveCorrector {
     }
 
     // Convert VNRectangleObservation (normalized, origin bottom-left) to view coords (origin top-left)
+    // Order returned: [TL, TR, BR, BL]
     static func vnObservationToViewCorners(
-        _ obs: any VNRectangleObservationProtocol,
+        _ obs: VNRectangleObservation,
         viewSize: CGSize
     ) -> [CGPoint] {
-        // Order: TL, TR, BR, BL
         let vnPoints = [obs.topLeft, obs.topRight, obs.bottomRight, obs.bottomLeft]
         return vnPoints.map { pt in
             CGPoint(x: pt.x * viewSize.width,
@@ -43,13 +42,3 @@ enum PerspectiveCorrector {
         }
     }
 }
-
-protocol VNRectangleObservationProtocol {
-    var topLeft: CGPoint { get }
-    var topRight: CGPoint { get }
-    var bottomLeft: CGPoint { get }
-    var bottomRight: CGPoint { get }
-}
-
-import Vision
-extension VNRectangleObservation: VNRectangleObservationProtocol {}

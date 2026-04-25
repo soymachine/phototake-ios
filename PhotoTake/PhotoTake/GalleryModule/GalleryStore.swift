@@ -22,13 +22,14 @@ final class GalleryStore: ObservableObject {
     }
 
     func save(image: CIImage, context: CIContext) {
+        let capturedDir = self.dir
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             do {
-                try FileManager.default.createDirectory(at: await self.dir,
+                try FileManager.default.createDirectory(at: capturedDir,
                                                         withIntermediateDirectories: true)
                 let id = UUID().uuidString
-                let url = await self.dir.appendingPathComponent("\(id).heic")
+                let url = capturedDir.appendingPathComponent("\(id).heic")
 
                 guard let data = context.heifRepresentation(of: image,
                                                             format: .RGBA8,
@@ -36,7 +37,7 @@ final class GalleryStore: ObservableObject {
                 else { throw GalleryError.encodingFailed }
 
                 try data.write(to: url)
-                let thumbData = Self.makeThumbnail(image: image, context: context, maxPx: 400)
+                let thumbData = GalleryStore.makeThumbnail(image: image, context: context, maxPx: 400)
                 let item = GalleryItem(id: id, thumbData: thumbData, fullResURL: url, date: .now)
 
                 await MainActor.run {
@@ -59,7 +60,6 @@ final class GalleryStore: ObservableObject {
         guard let data = try? Data(contentsOf: manifestURL),
               let decoded = try? JSONDecoder().decode([GalleryItem].self, from: data)
         else { return }
-        // Filter out items whose files no longer exist
         items = decoded.filter { FileManager.default.fileExists(atPath: $0.fullResURL.path) }
     }
 
@@ -68,7 +68,7 @@ final class GalleryStore: ObservableObject {
         try data.write(to: manifestURL)
     }
 
-    private static func makeThumbnail(image: CIImage, context: CIContext, maxPx: CGFloat) -> Data? {
+    nonisolated private static func makeThumbnail(image: CIImage, context: CIContext, maxPx: CGFloat) -> Data? {
         let extent = image.extent
         let scale = min(maxPx / extent.width, maxPx / extent.height, 1)
         let thumb = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))

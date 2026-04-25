@@ -10,33 +10,27 @@ struct ScanView: View {
     @State private var capturedImage: CIImage?
     @State private var showEdit = false
     @State private var overlaySize: CGSize = .zero
-    @State private var lastPixelBuffer: CVPixelBuffer?
-    @State private var frameSize: CGSize = .zero
     @State private var manualMode = false
+    @State private var detectionThrottle = ThrottleTimer(interval: 0.3)
 
     let ciContext: CIContext
-
-    private let detectionThrottle = ThrottleTimer(interval: 0.3)
 
     var body: some View {
         ZStack {
             DS.Color.background.ignoresSafeArea()
 
-            // Camera preview
             GeometryReader { geo in
                 CameraPreviewView(session: cameraSession, ciContext: ciContext)
                     .ignoresSafeArea()
                     .onAppear { overlaySize = geo.size }
-                    .onChange(of: geo.size) { overlaySize = $1 }
+                    .onChange(of: geo.size) { _, newSize in overlaySize = newSize }
 
-                // Quad overlay
                 if hasDetection || manualMode {
                     QuadOverlayView(corners: $detectedCorners, viewSize: geo.size, animated: !manualMode)
                         .allowsHitTesting(true)
                 }
             }
 
-            // Bottom controls
             VStack {
                 Spacer()
                 bottomBar
@@ -65,7 +59,6 @@ struct ScanView: View {
 
     private var bottomBar: some View {
         HStack(spacing: DS.Spacing.xl) {
-            // Manual mode toggle
             Button(action: toggleManualMode) {
                 VStack(spacing: DS.Spacing.xs) {
                     Image(systemName: manualMode ? "hand.raised.fill" : "hand.raised")
@@ -76,7 +69,6 @@ struct ScanView: View {
                 .foregroundStyle(manualMode ? DS.Color.accent : DS.Color.textSecondary)
             }
 
-            // Capture button
             Button(action: capture) {
                 ZStack {
                     Circle()
@@ -90,7 +82,6 @@ struct ScanView: View {
             .disabled(!hasDetection && !manualMode)
             .opacity((hasDetection || manualMode) ? 1 : 0.4)
 
-            // Flash placeholder / detection indicator
             VStack(spacing: DS.Spacing.xs) {
                 Image(systemName: hasDetection ? "rectangle.dashed" : "viewfinder")
                     .font(.system(size: 22))
@@ -105,25 +96,18 @@ struct ScanView: View {
     }
 
     private func setupFrameProcessing() {
+        let throttle = detectionThrottle
         cameraSession.onFrame = { [weak detector] pixelBuffer in
-            self.lastPixelBuffer = pixelBuffer
-
-            // Store frame dimensions
-            let w = CVPixelBufferGetWidth(pixelBuffer)
-            let h = CVPixelBufferGetHeight(pixelBuffer)
-            self.frameSize = CGSize(width: w, height: h)
-
-            guard !self.manualMode else { return }
-
-            self.detectionThrottle.call {
+            guard !manualMode else { return }
+            throttle.call {
                 detector?.detect(in: pixelBuffer) { obs in
                     guard let obs else {
-                        self.hasDetection = false
+                        hasDetection = false
                         return
                     }
-                    let viewCorners = PerspectiveCorrector.vnObservationToViewCorners(obs, viewSize: self.overlaySize)
-                    self.detectedCorners = viewCorners
-                    self.hasDetection = true
+                    let viewCorners = PerspectiveCorrector.vnObservationToViewCorners(obs, viewSize: overlaySize)
+                    detectedCorners = viewCorners
+                    hasDetection = true
                 }
             }
         }
@@ -132,7 +116,6 @@ struct ScanView: View {
     private func toggleManualMode() {
         manualMode.toggle()
         if manualMode && detectedCorners.isEmpty {
-            // Default full-frame quad
             let s = overlaySize
             let inset: CGFloat = 40
             detectedCorners = [
@@ -147,6 +130,8 @@ struct ScanView: View {
 
     private func capture() {
         guard !detectedCorners.isEmpty else { return }
+        let corners = detectedCorners
+        let viewSize = overlaySize
 
         cameraSession.capturePhoto { pixelBuffer in
             guard let pixelBuffer else { return }
@@ -155,8 +140,8 @@ struct ScanView: View {
                                   height: CVPixelBufferGetHeight(pixelBuffer))
 
             let pixelCorners = PerspectiveCorrector.viewCornersToImagePixels(
-                corners: self.detectedCorners,
-                viewSize: self.overlaySize,
+                corners: corners,
+                viewSize: viewSize,
                 imageSize: imageSize
             )
 
@@ -164,14 +149,13 @@ struct ScanView: View {
                 ?? ciImage
 
             DispatchQueue.main.async {
-                self.capturedImage = corrected
-                self.showEdit = true
+                capturedImage = corrected
+                showEdit = true
             }
         }
     }
 }
 
-// Simple throttle to avoid running detection every frame
 final class ThrottleTimer {
     private let interval: TimeInterval
     private var lastFire: Date = .distantPast
