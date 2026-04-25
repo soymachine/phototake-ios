@@ -34,17 +34,8 @@ struct EditView: View {
         .toolbarBackground(DS.Color.background, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Back") { dismiss() }
-                    .foregroundStyle(DS.Color.accent)
-                    .font(DS.Font.mono)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: DS.Spacing.lg) {
-                    shareButton
-                    saveButton
-                }
-            }
+            ToolbarItem(placement: .topBarTrailing) { shareButton }
+            ToolbarItem(placement: .topBarTrailing) { saveButton }
         }
         .task(id: adjustments) { await updatePreview() }
         .sheet(isPresented: $showShareSheet) {
