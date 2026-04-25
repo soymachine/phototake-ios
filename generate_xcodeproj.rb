@@ -120,7 +120,7 @@ pbx += "/* Begin PBXGroup section */\n"
 }.each do |g_uuid, (name, prefix)|
   members = SOURCES.select { |s| s.start_with?(prefix) }
   children = members.map { |s| "\t\t\t\t#{file_ref_uuid[s]} /* #{File.basename(s)} */," }.join("\n")
-  pbx += "\t\t#{g_uuid} /* #{name} */ = {\n\t\t\tisa = PBXGroup;\n\t\t\tchildren = (\n#{children}\n\t\t\t);\n\t\t\tname = #{name};\n\t\t\tsourceTree = \"<group>\";\n\t\t};\n"
+  pbx += "\t\t#{g_uuid} /* #{name} */ = {\n\t\t\tisa = PBXGroup;\n\t\t\tchildren = (\n#{children}\n\t\t\t);\n\t\t\tpath = #{name};\n\t\t\tsourceTree = \"<group>\";\n\t\t};\n"
 end
 
 # Main source group (PhotoTake)
