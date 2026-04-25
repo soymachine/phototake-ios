@@ -8,25 +8,18 @@ struct EditView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var adjustments = Adjustments.default
+    @State private var previewUIImage: UIImage?
     @State private var showShareSheet = false
     @State private var shareImage: UIImage?
     @State private var saveSucceeded: Bool? = nil
     @State private var isSaving = false
-
-    private var processedImage: CIImage {
-        AdjustmentPipeline.apply(capturedImage, adj: adjustments)
-    }
 
     var body: some View {
         ZStack {
             DS.Color.background.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Preview
-                imagePreview
-                    .frame(maxHeight: .infinity)
-
-                // Controls
+                imagePreview.frame(maxHeight: .infinity)
                 controlsPanel
             }
         }
@@ -44,54 +37,66 @@ struct EditView: View {
                 }
             }
         }
+        // Re-render preview only when adjustments actually change
+        .task(id: adjustments) { await updatePreview() }
         .sheet(isPresented: $showShareSheet) {
-            if let img = shareImage {
-                ShareSheet(items: [img])
-            }
+            if let img = shareImage { ShareSheet(items: [img]) }
         }
     }
 
+    // MARK: - Preview
+
     private var imagePreview: some View {
         GeometryReader { geo in
-            let rendered = renderPreview()
-            if let ui = rendered {
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: geo.size.width, height: geo.size.height)
+            Group {
+                if let ui = previewUIImage {
+                    Image(uiImage: ui)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                } else {
+                    ProgressView().tint(DS.Color.accent)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         }
         .padding(DS.Spacing.md)
     }
 
+    private func updatePreview() async {
+        let adj = adjustments
+        let src = capturedImage
+        let ctx = ciContext
+        let img: UIImage? = await Task.detached {
+            let processed = AdjustmentPipeline.apply(src, adj: adj)
+            guard let cg = ctx.createCGImage(processed, from: processed.extent) else { return nil }
+            return UIImage(cgImage: cg)
+        }.value
+        previewUIImage = img
+    }
+
+    // MARK: - Controls panel
+
     private var controlsPanel: some View {
         ScrollView {
             VStack(spacing: DS.Spacing.md) {
-                // Toggles
                 HStack(spacing: DS.Spacing.md) {
-                    toggleButton(
-                        label: "INVERT",
-                        systemImage: "circle.lefthalf.filled",
-                        isOn: $adjustments.invert
-                    )
-                    toggleButton(
-                        label: "B/W",
-                        systemImage: "camera.filters",
-                        isOn: $adjustments.blackAndWhite
-                    )
+                    toggleButton(label: "INVERT", systemImage: "circle.lefthalf.filled",
+                                 isOn: $adjustments.invert)
+                    toggleButton(label: "B/W", systemImage: "camera.filters",
+                                 isOn: $adjustments.blackAndWhite)
                 }
 
                 Divider().background(DS.Color.surface)
 
-                // Sliders
                 SliderRow(label: "Brightness", systemImage: "sun.max",
                           value: $adjustments.brightness, range: -1...1)
-                SliderRow(label: "Contrast", systemImage: "circle.lefthalf.filled.righthalf.striped.horizontal",
+                SliderRow(label: "Contrast",
+                          systemImage: "circle.lefthalf.filled.righthalf.striped.horizontal",
                           value: $adjustments.contrast, range: 0.5...2.0)
                 SliderRow(label: "Saturation", systemImage: "paintpalette",
                           value: $adjustments.saturation, range: 0...2.0)
 
-                // Reset
                 Button(action: { adjustments = .default }) {
                     Text("RESET")
                         .font(DS.Font.mono)
@@ -123,13 +128,15 @@ struct EditView: View {
         }
     }
 
+    // MARK: - Actions
+
     private var shareButton: some View {
         Button(action: {
-            shareImage = ExportController.makeShareImage(processedImage, context: ciContext)
+            let processed = AdjustmentPipeline.apply(capturedImage, adj: adjustments)
+            shareImage = ExportController.makeShareImage(processed, context: ciContext)
             showShareSheet = true
         }) {
-            Image(systemName: "square.and.arrow.up")
-                .foregroundStyle(DS.Color.accent)
+            Image(systemName: "square.and.arrow.up").foregroundStyle(DS.Color.accent)
         }
     }
 
@@ -147,20 +154,14 @@ struct EditView: View {
 
     private func saveToGallery() {
         isSaving = true
-        galleryStore.save(image: processedImage, context: ciContext)
-        // Optimistic UI — GalleryStore handles errors via saveError
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        let processed = AdjustmentPipeline.apply(capturedImage, adj: adjustments)
+        galleryStore.save(image: processed, context: ciContext)
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
             isSaving = false
             saveSucceeded = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                saveSucceeded = nil
-            }
+            try? await Task.sleep(for: .milliseconds(1500))
+            saveSucceeded = nil
         }
-    }
-
-    private func renderPreview() -> UIImage? {
-        let img = processedImage
-        guard let cg = ciContext.createCGImage(img, from: img.extent) else { return nil }
-        return UIImage(cgImage: cg)
     }
 }

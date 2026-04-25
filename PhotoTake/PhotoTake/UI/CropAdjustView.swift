@@ -17,7 +17,6 @@ struct CropAdjustView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Raw image background
                 Group {
                     if let img = displayUIImage {
                         Image(uiImage: img)
@@ -32,7 +31,6 @@ struct CropAdjustView: View {
                 }
                 .ignoresSafeArea()
 
-                // Editable corner overlay
                 if !corners.isEmpty {
                     QuadOverlayView(
                         corners: $corners,
@@ -56,25 +54,28 @@ struct CropAdjustView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 20) {
-                    // Loupe toggle
                     Button {
                         loupeEnabled.toggle()
                     } label: {
                         Image(systemName: loupeEnabled
                               ? "magnifyingglass.circle.fill"
                               : "magnifyingglass.circle")
-                        .foregroundStyle(DS.Color.accent)
-                        .font(.system(size: 22))
+                            .foregroundStyle(DS.Color.accent)
+                            .font(.system(size: 22))
                     }
-
-                    // Apply correction
                     Button("Apply") { applyCorrection() }
                         .foregroundStyle(DS.Color.accent)
                         .font(DS.Font.mono)
                 }
             }
         }
-        .task { await prepareImages() }
+        // Render display image once on appear
+        .task { await prepareDisplayImage() }
+        // Render loupe image whenever the view size is established
+        .onChange(of: displaySize) { _, size in
+            guard size != .zero else { return }
+            Task { loupeImage = await prepareLoupeImage(viewSize: size) }
+        }
         .navigationDestination(isPresented: $navigateToEdit) {
             if let img = correctedImage {
                 EditView(capturedImage: img, ciContext: ciContext)
@@ -84,49 +85,22 @@ struct CropAdjustView: View {
 
     // MARK: - Image preparation
 
-    private func prepareImages() async {
+    private func prepareDisplayImage() async {
         let ci = rawImage
         let ctx = ciContext
-
-        // Render raw image for display (background thread)
-        let mainImg: UIImage? = await Task.detached {
+        let img: UIImage? = await Task.detached {
             guard let cg = ctx.createCGImage(ci, from: ci.extent) else { return nil }
             return UIImage(cgImage: cg)
         }.value
-
-        await MainActor.run { displayUIImage = mainImg }
-
-        // Wait until displaySize is known
-        var waited = 0
-        while displaySize == .zero && waited < 20 {
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            waited += 1
-        }
-        guard displaySize != .zero else { return }
-
-        let size = displaySize
-        let loupe: UIImage? = await Task.detached {
-            makeLoupeImage(rawImage: ci, viewSize: size, context: ctx)
-        }.value
-        await MainActor.run { loupeImage = loupe }
+        displayUIImage = img
     }
 
-    // Creates a UIImage at exactly viewSize matching the scaledToFill display
-    private func makeLoupeImage(rawImage: CIImage, viewSize: CGSize, context: CIContext) -> UIImage? {
-        let iw = rawImage.extent.width
-        let ih = rawImage.extent.height
-        let scale = max(viewSize.width / iw, viewSize.height / ih)
-
-        var ci = rawImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        let ox = (ci.extent.width - viewSize.width) / 2
-        let oy = (ci.extent.height - viewSize.height) / 2
-        ci = ci.transformed(by: CGAffineTransform(translationX: -ox, y: -oy))
-
-        guard let cg = context.createCGImage(
-            ci,
-            from: CGRect(x: 0, y: 0, width: viewSize.width, height: viewSize.height)
-        ) else { return nil }
-        return UIImage(cgImage: cg)
+    private func prepareLoupeImage(viewSize: CGSize) async -> UIImage? {
+        let ci = rawImage
+        let ctx = ciContext
+        return await Task.detached {
+            cropFillImage(ci, toSize: viewSize, context: ctx)
+        }.value
     }
 
     // MARK: - Apply
@@ -141,4 +115,18 @@ struct CropAdjustView: View {
         correctedImage = PerspectiveCorrector.correct(image: rawImage, quad: pixelCorners) ?? rawImage
         navigateToEdit = true
     }
+}
+
+// MARK: - Free function (nonisolated, usable in Task.detached)
+
+private func cropFillImage(_ image: CIImage, toSize size: CGSize, context: CIContext) -> UIImage? {
+    let scale = max(size.width / image.extent.width, size.height / image.extent.height)
+    var ci = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+    let ox = (ci.extent.width - size.width) / 2
+    let oy = (ci.extent.height - size.height) / 2
+    ci = ci.transformed(by: CGAffineTransform(translationX: -ox, y: -oy))
+    guard let cg = context.createCGImage(
+        ci, from: CGRect(x: 0, y: 0, width: size.width, height: size.height)
+    ) else { return nil }
+    return UIImage(cgImage: cg)
 }
