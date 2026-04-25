@@ -32,11 +32,20 @@ struct CropAdjustView: View {
                 .ignoresSafeArea()
 
                 if !corners.isEmpty {
+                    let topMargin = geo.safeAreaInsets.top + 60
+                    let bottomMargin = geo.safeAreaInsets.bottom + 30
+                    let hMargin: CGFloat = 20
                     QuadOverlayView(
                         corners: $corners,
                         viewSize: geo.size,
                         isInteractive: true,
-                        latestFrame: loupeEnabled ? loupeImage : nil
+                        latestFrame: loupeEnabled ? loupeImage : nil,
+                        dragBounds: CGRect(
+                            x: hMargin,
+                            y: topMargin,
+                            width: geo.size.width - hMargin * 2,
+                            height: geo.size.height - topMargin - bottomMargin
+                        )
                     )
                 }
             }

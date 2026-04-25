@@ -6,6 +6,7 @@ struct QuadOverlayView: View {
     var isInteractive: Bool = true
     var animated: Bool = true
     var latestFrame: UIImage? = nil
+    var dragBounds: CGRect? = nil
 
     @State private var draggingIndex: Int? = nil
 
@@ -43,9 +44,10 @@ struct QuadOverlayView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
+                        let b = dragBounds ?? CGRect(origin: .zero, size: viewSize)
                         corners[index] = CGPoint(
-                            x: max(0, min(viewSize.width, value.location.x)),
-                            y: max(0, min(viewSize.height, value.location.y))
+                            x: max(b.minX, min(b.maxX, value.location.x)),
+                            y: max(b.minY, min(b.maxY, value.location.y))
                         )
                         draggingIndex = index
                     }

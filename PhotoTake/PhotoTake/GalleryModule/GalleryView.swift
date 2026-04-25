@@ -85,7 +85,6 @@ struct GalleryDetailView: View {
     let item: GalleryItem
     @EnvironmentObject var store: GalleryStore
     @Environment(\.dismiss) var dismiss
-    // Pre-loaded with thumbnail so first render is never blank
     @State private var displayImage: UIImage?
     @State private var showShareSheet = false
 
@@ -95,47 +94,50 @@ struct GalleryDetailView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            // Color.black has a definite size inside NavigationStack;
-            // overlay inherits that size so scaledToFit always has a reference.
-            DS.Color.background.ignoresSafeArea()
-                .overlay {
-                    if let img = displayImage {
-                        Image(uiImage: img)
-                            .resizable()
-                            .scaledToFit()
-                            .padding(DS.Spacing.md)
-                    } else {
-                        ProgressView().tint(DS.Color.accent)
+        ZStack(alignment: .top) {
+            DS.Color.background
+                .ignoresSafeArea()
+
+            if let img = displayImage {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(DS.Spacing.md)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ProgressView()
+                    .tint(DS.Color.accent)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // Custom top bar
+            HStack {
+                Button("Close") { dismiss() }
+                    .foregroundStyle(DS.Color.accent)
+                    .font(DS.Font.mono)
+                    .padding(.leading, 20)
+                Spacer()
+                Menu {
+                    Button(action: { showShareSheet = true }) {
+                        Label("Share", systemImage: "square.and.arrow.up")
                     }
-                }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(DS.Color.background, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(role: .destructive, action: {
+                        store.delete(item)
+                        dismiss()
+                    }) {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                         .foregroundStyle(DS.Color.accent)
-                        .font(DS.Font.mono)
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button(action: { showShareSheet = true }) {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                        Button(role: .destructive, action: {
-                            store.delete(item)
-                            dismiss()
-                        }) {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundStyle(DS.Color.accent)
-                    }
+                        .font(.system(size: 22))
+                        .padding(.trailing, 20)
                 }
             }
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial)
         }
+        .preferredColorScheme(.dark)
         .task {
             let url = item.fullResURL
             let loaded: UIImage? = await Task.detached(priority: .userInitiated) {
