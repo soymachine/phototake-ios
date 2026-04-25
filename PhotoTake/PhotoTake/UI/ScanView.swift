@@ -34,6 +34,19 @@ struct ScanView: View {
                 }
                 .onChange(of: geo.size) { _, s in overlaySize = s }
 
+            // DEBUG overlay — remove once height is confirmed correct
+            VStack(spacing: 4) {
+                let screen = UIScreen.main.bounds
+                Text("geo: \(Int(geo.size.width))×\(Int(geo.size.height))")
+                Text("screen: \(Int(screen.width))×\(Int(screen.height))")
+                Text("safeT:\(Int(geo.safeAreaInsets.top)) safeB:\(Int(geo.safeAreaInsets.bottom))")
+            }
+            .font(.system(size: 12, weight: .bold, design: .monospaced))
+            .foregroundStyle(.yellow)
+            .padding(8)
+            .background(Color.black.opacity(0.6))
+            .position(x: geo.size.width / 2, y: 80)
+
             // Visual-only detection quad (hidden while preview is showing)
             if hasDetection && capturedPreviewUIImage == nil {
                 QuadOverlayView(
