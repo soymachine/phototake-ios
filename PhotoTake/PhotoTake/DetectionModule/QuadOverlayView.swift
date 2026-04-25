@@ -4,38 +4,56 @@ struct QuadOverlayView: View {
     @Binding var corners: [CGPoint]
     let viewSize: CGSize
     var animated: Bool = true
+    var latestFrame: UIImage? = nil
+
+    @State private var draggingIndex: Int? = nil
 
     var body: some View {
         ZStack {
-            // Fill
             quadPath
-                .fill(Color.yellow.opacity(0.12))
+                .fill(Color.yellow.opacity(0.10))
 
-            // Stroke
             quadPath
                 .stroke(Color.yellow, lineWidth: 2)
 
-            // Corner handles
             ForEach(corners.indices, id: \.self) { i in
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 28, height: 28)
-                    .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
-                    .position(corners[i])
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                let clamped = CGPoint(
-                                    x: max(0, min(viewSize.width, value.location.x)),
-                                    y: max(0, min(viewSize.height, value.location.y))
-                                )
-                                corners[i] = clamped
-                            }
-                    )
+                handle(for: i)
+            }
+
+            // Loupe — positioned above the dragged handle
+            if let idx = draggingIndex, corners.indices.contains(idx) {
+                LoupeView(image: latestFrame,
+                          focalPoint: corners[idx],
+                          viewSize: viewSize)
+                    .position(loupePosition(for: corners[idx]))
+                    .transition(.opacity)
+                    .zIndex(10)
             }
         }
         .frame(width: viewSize.width, height: viewSize.height)
-        .animation(animated ? .easeOut(duration: 0.2) : nil, value: corners)
+        .animation(animated ? .easeOut(duration: 0.15) : nil, value: corners)
+    }
+
+    private func handle(for index: Int) -> some View {
+        Circle()
+            .fill(Color.white)
+            .frame(width: 28, height: 28)
+            .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
+            .position(corners[index])
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let clamped = CGPoint(
+                            x: max(0, min(viewSize.width, value.location.x)),
+                            y: max(0, min(viewSize.height, value.location.y))
+                        )
+                        corners[index] = clamped
+                        draggingIndex = index
+                    }
+                    .onEnded { _ in
+                        draggingIndex = nil
+                    }
+            )
     }
 
     private var quadPath: Path {
@@ -47,5 +65,50 @@ struct QuadOverlayView: View {
             p.addLine(to: corners[3])
             p.closeSubpath()
         }
+    }
+
+    private func loupePosition(for point: CGPoint) -> CGPoint {
+        let loupeDiameter: CGFloat = 96
+        let gap: CGFloat = 24
+        let x = max(loupeDiameter / 2, min(viewSize.width - loupeDiameter / 2, point.x))
+        let y = max(loupeDiameter / 2 + gap, point.y - 28 - gap)
+        return CGPoint(x: x, y: y)
+    }
+}
+
+struct LoupeView: View {
+    let image: UIImage?
+    let focalPoint: CGPoint
+    let viewSize: CGSize
+
+    private let diameter: CGFloat = 96
+    private let zoom: CGFloat = 2.0
+
+    var body: some View {
+        ZStack {
+            Color.black
+
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .frame(width: viewSize.width * zoom,
+                           height: viewSize.height * zoom)
+                    .offset(x: -(focalPoint.x * zoom) + diameter / 2,
+                            y: -(focalPoint.y * zoom) + diameter / 2)
+            }
+
+            // Crosshair
+            Path { p in
+                p.move(to: CGPoint(x: diameter / 2, y: diameter / 2 - 10))
+                p.addLine(to: CGPoint(x: diameter / 2, y: diameter / 2 + 10))
+                p.move(to: CGPoint(x: diameter / 2 - 10, y: diameter / 2))
+                p.addLine(to: CGPoint(x: diameter / 2 + 10, y: diameter / 2))
+            }
+            .stroke(Color.yellow.opacity(0.9), lineWidth: 1)
+        }
+        .frame(width: diameter, height: diameter)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.yellow, lineWidth: 2))
+        .shadow(color: .black.opacity(0.6), radius: 6)
     }
 }
