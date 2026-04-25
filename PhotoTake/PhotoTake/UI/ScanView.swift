@@ -59,9 +59,10 @@ struct ScanView: View {
                     .transition(.opacity)
             }
         }
-        .ignoresSafeArea()                 // ← full screen, including behind status bar
+        .ignoresSafeArea()
         .background(Color.black.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .onDisappear { cameraSession.stop() }
         .onReceive(NotificationCenter.default.publisher(
             for: UIApplication.willResignActiveNotification)) { _ in cameraSession.stop() }

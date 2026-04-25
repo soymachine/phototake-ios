@@ -9,10 +9,6 @@ struct ContentView: View {
         TabView {
             NavigationStack {
                 ScanView(ciContext: ciContext)
-                    .navigationTitle("PhotoTake")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbarBackground(DS.Color.background, for: .navigationBar)
-                    .toolbarColorScheme(.dark, for: .navigationBar)
             }
             .tabItem {
                 Label("Scan", systemImage: "viewfinder")
