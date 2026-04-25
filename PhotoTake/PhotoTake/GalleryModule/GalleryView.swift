@@ -159,7 +159,7 @@ struct GalleryDetailView: View {
             isLoadingFull = false
         }
         .sheet(isPresented: $showShareSheet) {
-            if let img = image { ShareSheet(items: [img]) }
+            if let img = displayImage { ShareSheet(items: [img]) }
         }
     }
 }
