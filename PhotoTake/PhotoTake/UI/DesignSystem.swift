@@ -2,18 +2,19 @@ import SwiftUI
 
 enum DS {
     enum Color {
-        static let accent = SwiftUI.Color.yellow
-        static let background = SwiftUI.Color.black
-        static let surface = SwiftUI.Color(white: 0.1)
-        static let surfaceSecondary = SwiftUI.Color(white: 0.15)
-        static let textPrimary = SwiftUI.Color.white
-        static let textSecondary = SwiftUI.Color(white: 0.6)
+        static let accent          = SwiftUI.Color(red: 1.0, green: 0.45, blue: 0.1)
+        static let background      = SwiftUI.Color.black
+        static let surface         = SwiftUI.Color(white: 0.11)
+        static let surfaceSecondary = SwiftUI.Color(white: 0.18)
+        static let textPrimary     = SwiftUI.Color.white
+        static let textSecondary   = SwiftUI.Color(white: 0.55)
     }
 
     enum Font {
-        static let mono = SwiftUI.Font.system(.body, design: .monospaced)
-        static let monoSmall = SwiftUI.Font.system(.caption, design: .monospaced)
-        static let title = SwiftUI.Font.system(.title2, design: .monospaced, weight: .semibold)
+        static let mono        = SwiftUI.Font.system(.body,    design: .monospaced)
+        static let monoSmall   = SwiftUI.Font.system(.caption, design: .monospaced)
+        static let monoCaption = SwiftUI.Font.system(.caption2, design: .monospaced, weight: .semibold)
+        static let title       = SwiftUI.Font.system(.title2,  design: .monospaced, weight: .semibold)
     }
 
     enum Spacing {
@@ -25,8 +26,9 @@ enum DS {
     }
 
     enum Corner {
-        static let sm: CGFloat = 6
-        static let md: CGFloat = 12
+        static let sm: CGFloat = 8
+        static let md: CGFloat = 14
+        static let lg: CGFloat = 20
     }
 }
 
@@ -41,13 +43,13 @@ struct SliderRow: View {
             HStack {
                 Image(systemName: systemImage)
                     .frame(width: 20)
-                    .foregroundStyle(DS.Color.textSecondary)
+                    .foregroundStyle(DS.Color.accent)
                 Text(label)
                     .font(DS.Font.monoSmall)
-                    .foregroundStyle(DS.Color.textSecondary)
+                    .foregroundStyle(DS.Color.textPrimary)
                 Spacer()
                 Text(String(format: "%.2f", value))
-                    .font(DS.Font.monoSmall)
+                    .font(DS.Font.monoCaption)
                     .foregroundStyle(DS.Color.textSecondary)
             }
             Slider(value: $value, in: range)

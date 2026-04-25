@@ -2,6 +2,40 @@ import SwiftUI
 import Vision
 import CoreImage
 
+// MARK: - Scan mode
+
+enum ScanMode: String, CaseIterable {
+    case document = "DOC"
+    case photo    = "PHOTO"
+    case negative = "NEG"
+
+    var icon: String {
+        switch self {
+        case .document: return "doc.text.viewfinder"
+        case .photo:    return "photo"
+        case .negative: return "film"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .document: return "Document"
+        case .photo:    return "Photo"
+        case .negative: return "Negative"
+        }
+    }
+
+    var initialAdjustments: Adjustments {
+        switch self {
+        case .negative: return Adjustments(brightness: 0, contrast: 1.1, saturation: 1,
+                                           invert: true, blackAndWhite: false)
+        default:        return .default
+        }
+    }
+}
+
+// MARK: - ScanView
+
 struct ScanView: View {
     @StateObject private var cameraSession = CameraSession()
     @State private var detector = RectangleDetector()
@@ -9,6 +43,7 @@ struct ScanView: View {
     @State private var hasDetection = false
     @State private var overlaySize: CGSize = .zero
     @State private var detectionThrottle = ThrottleTimer(interval: 0.3)
+    @State private var scanMode: ScanMode = .document
 
     // Post-capture state
     @State private var rawCapturedImage: CIImage?
@@ -17,13 +52,13 @@ struct ScanView: View {
     @State private var capturedPreviewUIImage: UIImage?
 
     // Navigation
-    @State private var showCrop = false
-    @State private var showEdit = false
+    @State private var showCrop    = false
+    @State private var showEdit    = false
+    @State private var showGallery = false
 
     let ciContext: CIContext
 
     var body: some View {
-        // GeometryReader ignores safe areas → geo.size = full screen
         GeometryReader { geo in
             Color.black
 
@@ -34,20 +69,7 @@ struct ScanView: View {
                 }
                 .onChange(of: geo.size) { _, s in overlaySize = s }
 
-            // DEBUG overlay — remove once height is confirmed correct
-            VStack(spacing: 4) {
-                let screen = UIScreen.main.bounds
-                Text("geo: \(Int(geo.size.width))×\(Int(geo.size.height))")
-                Text("screen: \(Int(screen.width))×\(Int(screen.height))")
-                Text("safeT:\(Int(geo.safeAreaInsets.top)) safeB:\(Int(geo.safeAreaInsets.bottom))")
-            }
-            .font(.system(size: 12, weight: .bold, design: .monospaced))
-            .foregroundStyle(.yellow)
-            .padding(8)
-            .background(Color.black.opacity(0.6))
-            .position(x: geo.size.width / 2, y: 80)
-
-            // Visual-only detection quad (hidden while preview is showing)
+            // Detection quad — visual only
             if hasDetection && capturedPreviewUIImage == nil {
                 QuadOverlayView(
                     corners: $detectedCorners,
@@ -57,18 +79,25 @@ struct ScanView: View {
                 .allowsHitTesting(false)
             }
 
-            // Shutter bar — only when no preview
+            // "DETECTED" badge just below status bar
+            if hasDetection && capturedPreviewUIImage == nil {
+                detectionBadge
+                    .position(x: geo.size.width / 2,
+                              y: geo.safeAreaInsets.top + 52)
+            }
+
+            // Mode selector + shutter bar at bottom
             if capturedPreviewUIImage == nil {
-                VStack {
+                VStack(spacing: 0) {
                     Spacer()
-                    shutterBar
-                        .padding(.bottom, geo.safeAreaInsets.bottom)
+                    modeSelector
+                    shutterBar(safeBottom: geo.safeAreaInsets.bottom)
                 }
             }
 
-            // Capture preview overlay
-            if let previewImg = capturedPreviewUIImage {
-                capturePreviewOverlay(previewImg, safeBottom: geo.safeAreaInsets.bottom)
+            // Post-capture overlay
+            if let img = capturedPreviewUIImage {
+                capturePreviewOverlay(img, safeBottom: geo.safeAreaInsets.bottom)
                     .transition(.opacity)
             }
         }
@@ -95,26 +124,96 @@ struct ScanView: View {
         }
         .navigationDestination(isPresented: $showEdit) {
             if let img = correctedCIImage {
-                EditView(capturedImage: img, ciContext: ciContext)
+                EditView(capturedImage: img,
+                         ciContext: ciContext,
+                         initialAdjustments: scanMode.initialAdjustments)
             }
         }
+        .navigationDestination(isPresented: $showGallery) {
+            GalleryView()
+        }
+    }
+
+    // MARK: - Detection badge
+
+    private var detectionBadge: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(DS.Color.accent)
+                .frame(width: 7, height: 7)
+            Text("DETECTED")
+                .font(DS.Font.monoCaption)
+                .foregroundStyle(DS.Color.accent)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+    }
+
+    // MARK: - Mode selector
+
+    private var modeSelector: some View {
+        HStack(spacing: 10) {
+            ForEach(ScanMode.allCases, id: \.self) { mode in
+                Button {
+                    withAnimation(.spring(duration: 0.2)) { scanMode = mode }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: mode.icon)
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(mode.rawValue)
+                            .font(DS.Font.monoCaption)
+                    }
+                    .foregroundStyle(scanMode == mode ? DS.Color.background : DS.Color.textSecondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(scanMode == mode ? DS.Color.accent : Color.white.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+            }
+        }
+        .padding(.bottom, 16)
     }
 
     // MARK: - Shutter bar
 
-    private var shutterBar: some View {
-        HStack {
-            Spacer()
-            Button(action: capture) {
+    private func shutterBar(safeBottom: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: 0) {
+            // Gallery shortcut
+            Button { showGallery = true } label: {
                 ZStack {
-                    Circle().fill(DS.Color.accent).frame(width: 60, height: 60)
-                    Circle().stroke(Color.white.opacity(0.8), lineWidth: 2.5).frame(width: 68, height: 68)
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 54, height: 54)
+                    Image(systemName: "photo.stack")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.white)
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity)
+
+            // Shutter button
+            Button(action: capture) {
+                ZStack {
+                    Circle()
+                        .stroke(DS.Color.accent, lineWidth: 4)
+                        .frame(width: 84, height: 84)
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 68, height: 68)
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            // Symmetry placeholder
+            Color.clear
+                .frame(width: 54, height: 54)
+                .frame(maxWidth: .infinity)
         }
-        .padding(.top, 14)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 28)
+        .padding(.top, 16)
+        .padding(.bottom, max(safeBottom, 20))
         .background(.ultraThinMaterial)
     }
 
@@ -122,66 +221,60 @@ struct ScanView: View {
 
     private func capturePreviewOverlay(_ image: UIImage, safeBottom: CGFloat) -> some View {
         ZStack {
-            Color.black.opacity(0.82).ignoresSafeArea()
+            Color.black.opacity(0.9).ignoresSafeArea()
 
             VStack(spacing: 0) {
-                Spacer(minLength: 20)
+                // Mode label
+                Text(scanMode.label.uppercased())
+                    .font(DS.Font.monoCaption)
+                    .foregroundStyle(DS.Color.accent)
+                    .padding(.top, 24)
+
+                Spacer(minLength: 16)
 
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 24)
-                    .shadow(color: .black.opacity(0.5), radius: 12)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Corner.lg))
+                    .padding(.horizontal, 20)
+                    .shadow(color: DS.Color.accent.opacity(0.15), radius: 24)
 
-                Spacer(minLength: 20)
+                Spacer(minLength: 24)
 
-                // Action buttons
-                HStack(spacing: 12) {
-                    // Retake
-                    Button {
-                        withAnimation { capturedPreviewUIImage = nil }
-                    } label: {
-                        Label("Retake", systemImage: "arrow.counterclockwise")
-                            .font(DS.Font.mono)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(DS.Color.surfaceSecondary)
-                            .foregroundStyle(DS.Color.textPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+                // Actions
+                VStack(spacing: 10) {
+                    HStack(spacing: 10) {
+                        previewButton("Retake", icon: "arrow.counterclockwise", isPrimary: false) {
+                            withAnimation { capturedPreviewUIImage = nil }
+                        }
+                        previewButton("Adjust", icon: "skew", isPrimary: false) {
+                            withAnimation { capturedPreviewUIImage = nil }
+                            showCrop = true
+                        }
                     }
-
-                    // Adjust corners
-                    Button {
-                        withAnimation { capturedPreviewUIImage = nil }
-                        showCrop = true
-                    } label: {
-                        Label("Adjust", systemImage: "crop")
-                            .font(DS.Font.mono)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(DS.Color.surfaceSecondary)
-                            .foregroundStyle(DS.Color.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
-                    }
-
-                    // Continue to edit
-                    Button {
+                    previewButton("Use Photo", icon: "checkmark", isPrimary: true) {
                         withAnimation { capturedPreviewUIImage = nil }
                         showEdit = true
-                    } label: {
-                        Label("Use", systemImage: "checkmark")
-                            .font(DS.Font.mono)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(DS.Color.accent)
-                            .foregroundStyle(DS.Color.background)
-                            .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, max(safeBottom, 24))
+                .padding(.horizontal, 20)
+                .padding(.bottom, max(safeBottom, 28))
             }
+        }
+    }
+
+    private func previewButton(_ label: String, icon: String, isPrimary: Bool,
+                                action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                Text(label).font(DS.Font.mono)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(isPrimary ? DS.Color.accent : DS.Color.surfaceSecondary)
+            .foregroundStyle(isPrimary ? DS.Color.background : DS.Color.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Corner.md))
         }
     }
 
@@ -210,7 +303,6 @@ struct ScanView: View {
         let ctx = ciContext
 
         Task {
-            // Bridge callback to async/await
             guard let pixelBuffer = await withCheckedContinuation(
                 { (cont: CheckedContinuation<CVPixelBuffer?, Never>) in
                     cameraSession.capturePhoto { buf in cont.resume(returning: buf) }
@@ -224,7 +316,6 @@ struct ScanView: View {
                 corners: corners, viewSize: size, imageSize: imgSize)
             let corrected = PerspectiveCorrector.correct(image: raw, quad: pixelCorners) ?? raw
 
-            // Render preview off main thread
             let previewImg: UIImage? = await Task.detached {
                 guard let cg = ctx.createCGImage(corrected, from: corrected.extent) else { return nil }
                 return UIImage(cgImage: cg)

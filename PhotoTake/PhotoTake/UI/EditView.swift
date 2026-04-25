@@ -7,12 +7,19 @@ struct EditView: View {
     @EnvironmentObject var galleryStore: GalleryStore
     @Environment(\.dismiss) var dismiss
 
-    @State private var adjustments = Adjustments.default
+    @State private var adjustments: Adjustments
     @State private var previewUIImage: UIImage?
     @State private var showShareSheet = false
     @State private var shareImage: UIImage?
     @State private var saveSucceeded: Bool? = nil
     @State private var isSaving = false
+
+    init(capturedImage: CIImage, ciContext: CIContext,
+         initialAdjustments: Adjustments = .default) {
+        self.capturedImage = capturedImage
+        self.ciContext = ciContext
+        self._adjustments = State(initialValue: initialAdjustments)
+    }
 
     var body: some View {
         ZStack {
@@ -24,6 +31,8 @@ struct EditView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(DS.Color.background, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Back") { dismiss() }
@@ -31,13 +40,12 @@ struct EditView: View {
                     .font(DS.Font.mono)
             }
             ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: DS.Spacing.md) {
+                HStack(spacing: DS.Spacing.lg) {
                     shareButton
                     saveButton
                 }
             }
         }
-        // Re-render preview only when adjustments actually change
         .task(id: adjustments) { await updatePreview() }
         .sheet(isPresented: $showShareSheet) {
             if let img = shareImage { ShareSheet(items: [img]) }
@@ -80,14 +88,14 @@ struct EditView: View {
     private var controlsPanel: some View {
         ScrollView {
             VStack(spacing: DS.Spacing.md) {
-                HStack(spacing: DS.Spacing.md) {
+                HStack(spacing: DS.Spacing.sm) {
                     toggleButton(label: "INVERT", systemImage: "circle.lefthalf.filled",
                                  isOn: $adjustments.invert)
                     toggleButton(label: "B/W", systemImage: "camera.filters",
                                  isOn: $adjustments.blackAndWhite)
                 }
 
-                Divider().background(DS.Color.surface)
+                Divider().background(DS.Color.surfaceSecondary)
 
                 SliderRow(label: "Brightness", systemImage: "sun.max",
                           value: $adjustments.brightness, range: -1...1)
@@ -110,7 +118,7 @@ struct EditView: View {
             .padding(DS.Spacing.md)
         }
         .background(DS.Color.surface)
-        .frame(maxHeight: 300)
+        .frame(maxHeight: 280)
     }
 
     private func toggleButton(label: String, systemImage: String, isOn: Binding<Bool>) -> some View {

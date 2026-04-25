@@ -5,30 +5,35 @@ struct GalleryView: View {
     @State private var selectedItem: GalleryItem?
     @State private var showingDetail = false
 
-    let columns = [GridItem(.adaptive(minimum: 120, maximum: 200), spacing: 2)]
+    private let columns = [
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2),
+        GridItem(.flexible(), spacing: 2)
+    ]
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if store.items.isEmpty {
-                    emptyState
-                } else {
-                    ScrollView {
-                        LazyVGrid(columns: columns, spacing: 2) {
-                            ForEach(store.items) { item in
-                                ThumbnailCell(item: item)
-                                    .onTapGesture {
-                                        selectedItem = item
-                                        showingDetail = true
-                                    }
-                            }
+        Group {
+            if store.items.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 2) {
+                        ForEach(store.items) { item in
+                            ThumbnailCell(item: item)
+                                .onTapGesture {
+                                    selectedItem = item
+                                    showingDetail = true
+                                }
                         }
                     }
                 }
             }
-            .navigationTitle("Gallery")
-            .navigationBarTitleDisplayMode(.inline)
         }
+        .background(DS.Color.background.ignoresSafeArea())
+        .navigationTitle("Gallery")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(DS.Color.background, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .sheet(isPresented: $showingDetail) {
             if let item = selectedItem {
                 GalleryDetailView(item: item)
@@ -38,16 +43,16 @@ struct GalleryView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "photo.on.rectangle.angled")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+        VStack(spacing: DS.Spacing.md) {
+            Image(systemName: "photo.stack")
+                .font(.system(size: 56))
+                .foregroundStyle(DS.Color.textSecondary)
             Text("No scans yet")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            Text("Scan a document or negative to get started")
-                .font(.subheadline)
-                .foregroundStyle(.tertiary)
+                .font(DS.Font.mono)
+                .foregroundStyle(DS.Color.textSecondary)
+            Text("Tap the shutter button to scan\nyour first document or photo")
+                .font(DS.Font.monoSmall)
+                .foregroundStyle(DS.Color.textSecondary.opacity(0.7))
                 .multilineTextAlignment(.center)
         }
         .padding()
@@ -66,7 +71,7 @@ struct ThumbnailCell: View {
                         .resizable()
                         .scaledToFill()
                 } else {
-                    Rectangle().fill(Color.secondary.opacity(0.2))
+                    DS.Color.surface
                 }
             }
             .frame(width: geo.size.width, height: geo.size.width)
@@ -94,14 +99,19 @@ struct GalleryDetailView: View {
                             .padding()
                     }
                 } else {
-                    ProgressView()
+                    ProgressView().tint(DS.Color.accent)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .background(DS.Color.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(DS.Color.background, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
+                        .foregroundStyle(DS.Color.accent)
+                        .font(DS.Font.mono)
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
@@ -116,6 +126,7 @@ struct GalleryDetailView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
+                            .foregroundStyle(DS.Color.accent)
                     }
                 }
             }
@@ -126,9 +137,7 @@ struct GalleryDetailView: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            if let img = image {
-                ShareSheet(items: [img])
-            }
+            if let img = image { ShareSheet(items: [img]) }
         }
     }
 }
