@@ -8,7 +8,7 @@ struct CropAdjustView: View {
 
     @State private var corners: [CGPoint] = []
     @State private var displaySize: CGSize = .zero
-    @State private var loupeEnabled = false
+    @State private var loupeEnabled = true          // on by default
     @State private var displayUIImage: UIImage?
     @State private var loupeImage: UIImage?
     @State private var correctedImage: CIImage?
@@ -46,12 +46,14 @@ struct CropAdjustView: View {
                 corners = initialNormalizedCorners.map {
                     CGPoint(x: $0.x * size.width, y: $0.y * size.height)
                 }
-                Task { loupeImage = await prepareLoupeImage(viewSize: size) }
+                Task { await prepareImages(viewSize: size) }
             }
         }
         .ignoresSafeArea()
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle("Adjust")
+        .toolbarBackground(DS.Color.background, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 20) {
@@ -70,13 +72,6 @@ struct CropAdjustView: View {
                 }
             }
         }
-        // Render display image once on appear
-        .task { await prepareDisplayImage() }
-        // Render loupe image whenever the view size is established
-        .onChange(of: displaySize) { _, size in
-            guard size != .zero else { return }
-            Task { loupeImage = await prepareLoupeImage(viewSize: size) }
-        }
         .navigationDestination(isPresented: $navigateToEdit) {
             if let img = correctedImage {
                 EditView(capturedImage: img, ciContext: ciContext)
@@ -86,22 +81,21 @@ struct CropAdjustView: View {
 
     // MARK: - Image preparation
 
-    private func prepareDisplayImage() async {
+    private func prepareImages(viewSize: CGSize) async {
         let ci = rawImage
         let ctx = ciContext
-        let img: UIImage? = await Task.detached {
+
+        // Render full-res display image off main thread
+        let displayImg: UIImage? = await Task.detached {
             guard let cg = ctx.createCGImage(ci, from: ci.extent) else { return nil }
             return UIImage(cgImage: cg)
         }.value
-        displayUIImage = img
-    }
 
-    private func prepareLoupeImage(viewSize: CGSize) async -> UIImage? {
-        let ci = rawImage
-        let ctx = ciContext
-        return await Task.detached {
-            cropFillImage(ci, toSize: viewSize, context: ctx)
-        }.value
+        displayUIImage = displayImg
+
+        // Build loupe image: UIKit crop-fill so it matches .scaledToFill() exactly
+        guard let src = displayImg, viewSize != .zero else { return }
+        loupeImage = await Task.detached { scaleFillImage(src, toSize: viewSize) }.value
     }
 
     // MARK: - Apply
@@ -118,16 +112,17 @@ struct CropAdjustView: View {
     }
 }
 
-// MARK: - Free function (nonisolated, usable in Task.detached)
+// MARK: - UIKit crop-fill (nonisolated, safe for Task.detached)
 
-private func cropFillImage(_ image: CIImage, toSize size: CGSize, context: CIContext) -> UIImage? {
-    let scale = max(size.width / image.extent.width, size.height / image.extent.height)
-    var ci = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-    let ox = (ci.extent.width - size.width) / 2
-    let oy = (ci.extent.height - size.height) / 2
-    ci = ci.transformed(by: CGAffineTransform(translationX: -ox, y: -oy))
-    guard let cg = context.createCGImage(
-        ci, from: CGRect(x: 0, y: 0, width: size.width, height: size.height)
-    ) else { return nil }
-    return UIImage(cgImage: cg)
+private func scaleFillImage(_ image: UIImage, toSize size: CGSize) -> UIImage {
+    let scaleX = size.width  / image.size.width
+    let scaleY = size.height / image.size.height
+    let scale  = max(scaleX, scaleY)
+    let scaledW = image.size.width  * scale
+    let scaledH = image.size.height * scale
+    let ox = (scaledW - size.width)  / 2
+    let oy = (scaledH - size.height) / 2
+    return UIGraphicsImageRenderer(size: size).image { _ in
+        image.draw(in: CGRect(x: -ox, y: -oy, width: scaledW, height: scaledH))
+    }
 }

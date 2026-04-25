@@ -29,16 +29,11 @@ final class GalleryStore: ObservableObject {
                 try FileManager.default.createDirectory(at: capturedDir,
                                                         withIntermediateDirectories: true)
                 let id = UUID().uuidString
-                let url = capturedDir.appendingPathComponent("\(id).heic")
+                let url = capturedDir.appendingPathComponent("\(id).jpg")
 
-                // Normalize extent origin to (0,0) — heifRepresentation requires it
-                let extent = image.extent
-                let normalized = extent.origin == .zero ? image :
-                    image.transformed(by: CGAffineTransform(translationX: -extent.origin.x,
-                                                             y: -extent.origin.y))
-                guard let data = context.heifRepresentation(of: normalized,
-                                                            format: .RGBA8,
-                                                            colorSpace: CGColorSpaceCreateDeviceRGB())
+                // Render via CGImage then UIImage — more reliable than heifRepresentation
+                guard let cgImage = context.createCGImage(image, from: image.extent),
+                      let data = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.92)
                 else { throw GalleryError.encodingFailed }
 
                 try data.write(to: url)
