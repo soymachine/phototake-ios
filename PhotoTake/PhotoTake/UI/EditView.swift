@@ -11,8 +11,10 @@ struct EditView: View {
     @State private var previewUIImage: UIImage?
     @State private var showShareSheet = false
     @State private var shareImage: UIImage?
-    @State private var saveSucceeded: Bool? = nil
-    @State private var isSaving = false
+    @State private var saveState: SaveState = .idle
+    @State private var showGallery = false
+
+    private enum SaveState { case idle, saving, saved }
 
     init(capturedImage: CIImage, ciContext: CIContext,
          initialAdjustments: Adjustments = .default) {
@@ -35,8 +37,8 @@ struct EditView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { shareButton }
-            ToolbarItem(placement: .topBarTrailing) { saveButton }
         }
+        .navigationDestination(isPresented: $showGallery) { GalleryView() }
         .task(id: adjustments) { await updatePreview() }
         .sheet(isPresented: $showShareSheet) {
             if let img = shareImage { ShareSheet(items: [img]) }
@@ -79,6 +81,8 @@ struct EditView: View {
     private var controlsPanel: some View {
         ScrollView {
             VStack(spacing: DS.Spacing.md) {
+                saveRow
+
                 HStack(spacing: DS.Spacing.sm) {
                     toggleButton(label: "INVERT", systemImage: "circle.lefthalf.filled",
                                  isOn: $adjustments.invert)
@@ -112,6 +116,64 @@ struct EditView: View {
         .frame(maxHeight: 280)
     }
 
+    // MARK: - Save row
+
+    private var saveRow: some View {
+        Group {
+            switch saveState {
+            case .idle:
+                Button(action: saveToGallery) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "square.and.arrow.down")
+                        Text("Save").font(DS.Font.mono)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, DS.Spacing.sm)
+                    .background(DS.Color.surfaceSecondary)
+                    .foregroundStyle(DS.Color.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+                }
+
+            case .saving:
+                HStack {
+                    ProgressView().tint(DS.Color.accent)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(DS.Color.surfaceSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+
+            case .saved:
+                HStack {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark")
+                        Text("Saved").font(DS.Font.mono)
+                    }
+                    .foregroundStyle(DS.Color.accent)
+
+                    Spacer()
+
+                    Button(action: { showGallery = true }) {
+                        HStack(spacing: 6) {
+                            Text("Gallery").font(DS.Font.mono)
+                            Image(systemName: "photo.stack")
+                        }
+                        .foregroundStyle(DS.Color.background)
+                        .padding(.horizontal, DS.Spacing.md)
+                        .padding(.vertical, 6)
+                        .background(DS.Color.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+                    }
+                }
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.vertical, DS.Spacing.sm)
+                .background(DS.Color.surfaceSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: saveState == .idle)
+    }
+
     private func toggleButton(label: String, systemImage: String, isOn: Binding<Bool>) -> some View {
         Button(action: { isOn.wrappedValue.toggle() }) {
             HStack(spacing: DS.Spacing.xs) {
@@ -139,28 +201,14 @@ struct EditView: View {
         }
     }
 
-    private var saveButton: some View {
-        Button(action: saveToGallery) {
-            if isSaving {
-                ProgressView().tint(DS.Color.accent)
-            } else {
-                Image(systemName: saveSucceeded == true ? "checkmark" : "square.and.arrow.down")
-                    .foregroundStyle(DS.Color.accent)
-            }
-        }
-        .disabled(isSaving)
-    }
-
     private func saveToGallery() {
-        isSaving = true
+        saveState = .saving
         let processed = AdjustmentPipeline.apply(capturedImage, adj: adjustments)
         galleryStore.save(image: processed, context: ciContext)
         Task {
-            try? await Task.sleep(for: .milliseconds(500))
-            isSaving = false
-            saveSucceeded = true
-            try? await Task.sleep(for: .milliseconds(1500))
-            saveSucceeded = nil
+            try? await Task.sleep(for: .milliseconds(600))
+            saveState = .saved
         }
     }
 }
+
