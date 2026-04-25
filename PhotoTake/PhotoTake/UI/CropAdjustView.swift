@@ -52,8 +52,16 @@ struct CropAdjustView: View {
             .onAppear {
                 let size = geo.size
                 displaySize = size
+                let topMargin = geo.safeAreaInsets.top + 60
+                let bottomMargin = geo.safeAreaInsets.bottom + 30
+                let hMargin: CGFloat = 20
+                let b = CGRect(x: hMargin, y: topMargin,
+                               width: size.width - hMargin * 2,
+                               height: size.height - topMargin - bottomMargin)
                 corners = initialNormalizedCorners.map {
-                    CGPoint(x: $0.x * size.width, y: $0.y * size.height)
+                    let pt = CGPoint(x: $0.x * size.width, y: $0.y * size.height)
+                    return CGPoint(x: max(b.minX, min(b.maxX, pt.x)),
+                                   y: max(b.minY, min(b.maxY, pt.y)))
                 }
                 Task { await prepareImages(viewSize: size) }
             }

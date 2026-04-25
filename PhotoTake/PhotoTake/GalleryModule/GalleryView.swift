@@ -85,12 +85,13 @@ struct GalleryDetailView: View {
     let item: GalleryItem
     @EnvironmentObject var store: GalleryStore
     @Environment(\.dismiss) var dismiss
-    @State private var displayImage: UIImage?
+    @State private var fullResImage: UIImage? = nil
     @State private var showShareSheet = false
 
-    init(item: GalleryItem) {
-        self.item = item
-        self._displayImage = State(initialValue: item.thumbData.flatMap { UIImage(data: $0) })
+    // Computed so it re-evaluates every render: shows full-res when loaded,
+    // always falls back to thumbnail (already in memory) — never nil if item has thumbData.
+    private var displayImage: UIImage? {
+        fullResImage ?? item.thumbData.flatMap { UIImage(data: $0) }
     }
 
     var body: some View {
@@ -144,7 +145,7 @@ struct GalleryDetailView: View {
                 guard let data = try? Data(contentsOf: url) else { return nil }
                 return UIImage(data: data)
             }.value
-            if let loaded { displayImage = loaded }
+            if let loaded { fullResImage = loaded }
         }
         .sheet(isPresented: $showShareSheet) {
             if let img = displayImage { ShareSheet(items: [img]) }
