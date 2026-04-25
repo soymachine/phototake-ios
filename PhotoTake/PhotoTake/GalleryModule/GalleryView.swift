@@ -138,12 +138,11 @@ struct GalleryDetailView: View {
         }
         .task {
             let url = item.fullResURL
-            if let img = await Task.detached(priority: .userInitiated) {
+            let loaded: UIImage? = await Task.detached(priority: .userInitiated) {
                 guard let data = try? Data(contentsOf: url) else { return nil }
                 return UIImage(data: data)
-            }.value {
-                displayImage = img
-            }
+            }.value
+            if let loaded { displayImage = loaded }
         }
         .sheet(isPresented: $showShareSheet) {
             if let img = displayImage { ShareSheet(items: [img]) }
