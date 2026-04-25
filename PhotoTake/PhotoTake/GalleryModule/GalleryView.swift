@@ -85,23 +85,43 @@ struct GalleryDetailView: View {
     let item: GalleryItem
     @EnvironmentObject var store: GalleryStore
     @Environment(\.dismiss) var dismiss
-    @State private var image: UIImage?
+    @State private var fullImage: UIImage?
+    @State private var isLoadingFull = true
     @State private var showShareSheet = false
+
+    // Shown immediately from in-memory data while full-res loads
+    private var thumbImage: UIImage? {
+        item.thumbData.flatMap { UIImage(data: $0) }
+    }
+
+    private var displayImage: UIImage? { fullImage ?? thumbImage }
 
     var body: some View {
         NavigationStack {
-            GeometryReader { geo in
-                if let img = image {
-                    Image(uiImage: img)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                } else {
-                    ProgressView().tint(DS.Color.accent)
-                        .frame(width: geo.size.width, height: geo.size.height)
+            ZStack {
+                DS.Color.background.ignoresSafeArea()
+
+                GeometryReader { geo in
+                    if let img = displayImage {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geo.size.width, height: geo.size.height)
+                    } else {
+                        ProgressView().tint(DS.Color.accent)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                    }
+                }
+
+                // Small loading indicator while upgrading thumb → full-res
+                if isLoadingFull && thumbImage != nil {
+                    VStack {
+                        Spacer()
+                        ProgressView().tint(.white)
+                            .padding(.bottom, 24)
+                    }
                 }
             }
-            .background(DS.Color.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(DS.Color.background, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
@@ -130,9 +150,13 @@ struct GalleryDetailView: View {
             }
         }
         .task {
-            if let data = try? Data(contentsOf: item.fullResURL) {
-                image = UIImage(data: data)
-            }
+            // Load full-res off main thread so it doesn't block UI
+            let url = item.fullResURL
+            fullImage = await Task.detached(priority: .userInitiated) {
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return UIImage(data: data)
+            }.value
+            isLoadingFull = false
         }
         .sheet(isPresented: $showShareSheet) {
             if let img = image { ShareSheet(items: [img]) }

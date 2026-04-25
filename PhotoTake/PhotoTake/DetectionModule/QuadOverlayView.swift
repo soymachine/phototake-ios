@@ -96,14 +96,21 @@ struct LoupeView: View {
                 // viewSize/2 in source coords. Offset = zoom*(viewSize/2 - focalPoint).
                 .offset(x: zoom * (viewSize.width  / 2 - focalPoint.x),
                         y: zoom * (viewSize.height / 2 - focalPoint.y))
-            // Crosshair
+            // Crosshair — white shadow first for contrast, then yellow on top
             Path { p in
-                p.move(to: CGPoint(x: diameter / 2, y: diameter / 2 - 10))
-                p.addLine(to: CGPoint(x: diameter / 2, y: diameter / 2 + 10))
-                p.move(to: CGPoint(x: diameter / 2 - 10, y: diameter / 2))
-                p.addLine(to: CGPoint(x: diameter / 2 + 10, y: diameter / 2))
+                p.move(to: CGPoint(x: diameter / 2, y: diameter / 2 - 14))
+                p.addLine(to: CGPoint(x: diameter / 2, y: diameter / 2 + 14))
+                p.move(to: CGPoint(x: diameter / 2 - 14, y: diameter / 2))
+                p.addLine(to: CGPoint(x: diameter / 2 + 14, y: diameter / 2))
             }
-            .stroke(Color.yellow.opacity(0.9), lineWidth: 1)
+            .stroke(Color.white.opacity(0.5), lineWidth: 3)
+            Path { p in
+                p.move(to: CGPoint(x: diameter / 2, y: diameter / 2 - 14))
+                p.addLine(to: CGPoint(x: diameter / 2, y: diameter / 2 + 14))
+                p.move(to: CGPoint(x: diameter / 2 - 14, y: diameter / 2))
+                p.addLine(to: CGPoint(x: diameter / 2 + 14, y: diameter / 2))
+            }
+            .stroke(Color.yellow, lineWidth: 1.5)
         }
         .frame(width: diameter, height: diameter)
         .clipShape(Circle())
