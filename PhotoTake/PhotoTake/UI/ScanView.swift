@@ -101,7 +101,7 @@ struct ScanView: View {
         }
         .padding(.top, 14)
         .padding(.bottom, 8)
-        .background(.ultraThinMaterial.ignoresSafeArea())
+        .background(.ultraThinMaterial)
     }
 
     // MARK: - Capture preview overlay
