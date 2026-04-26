@@ -38,6 +38,7 @@ enum ScanMode: String, CaseIterable {
 
 struct ScanView: View {
     @StateObject private var cameraSession = CameraSession()
+    @EnvironmentObject var proStore: ProStore
     @State private var detector = RectangleDetector()
     @State private var detectedCorners: [CGPoint] = []
     @State private var hasDetection = false
@@ -52,9 +53,10 @@ struct ScanView: View {
     @State private var capturedPreviewUIImage: UIImage?
 
     // Navigation
-    @State private var showCrop    = false
-    @State private var showEdit    = false
-    @State private var showGallery = false
+    @State private var showCrop     = false
+    @State private var showEdit     = false
+    @State private var showGallery  = false
+    @State private var showPaywall  = false
 
     let ciContext: CIContext
 
@@ -85,6 +87,13 @@ struct ScanView: View {
                 detectionBadge
                     .position(x: geo.size.width / 2,
                               y: geo.safeAreaInsets.top + 52)
+            }
+
+            // Scan count badge for free users
+            if capturedPreviewUIImage == nil && !proStore.isPro {
+                scanCountBadge
+                    .position(x: geo.size.width / 2,
+                              y: geo.safeAreaInsets.top + 16)
             }
 
             // Mode selector + shutter bar at bottom
@@ -133,6 +142,25 @@ struct ScanView: View {
         .navigationDestination(isPresented: $showGallery) {
             GalleryView()
         }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+    }
+
+    // MARK: - Scan count badge (free users)
+
+    private var scanCountBadge: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "lock.fill").font(.system(size: 9))
+            Text("\(proStore.scansRemaining) scans left")
+                .font(DS.Font.monoCaption)
+        }
+        .foregroundStyle(DS.Color.accent)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .onTapGesture { showPaywall = true }
     }
 
     // MARK: - Detection badge
@@ -298,10 +326,13 @@ struct ScanView: View {
     // MARK: - Capture
 
     private func capture() {
+        guard proStore.canScan else { showPaywall = true; return }
+
         let corners = detectedCorners.isEmpty ? fullFrameCorners : detectedCorners
         let size = overlaySize
         let normalized = corners.map { CGPoint(x: $0.x / size.width, y: $0.y / size.height) }
         let ctx = ciContext
+        let isFree = !proStore.isPro
 
         Task {
             guard let raw = await withCheckedContinuation(
@@ -313,13 +344,17 @@ struct ScanView: View {
             let imgSize = CGSize(width: raw.extent.width, height: raw.extent.height)
             let pixelCorners = PerspectiveCorrector.viewCornersToImagePixels(
                 corners: corners, viewSize: size, imageSize: imgSize)
-            let corrected = PerspectiveCorrector.correct(image: raw, quad: pixelCorners) ?? raw
+            var corrected = PerspectiveCorrector.correct(image: raw, quad: pixelCorners) ?? raw
+
+            // Free tier: cap at 1080p
+            if isFree { corrected = corrected.limited(to: 1080) }
 
             let previewImg: UIImage? = await Task.detached {
                 guard let cg = ctx.createCGImage(corrected, from: corrected.extent) else { return nil }
                 return UIImage(cgImage: cg)
             }.value
 
+            proStore.recordScan()
             rawCapturedImage = raw
             correctedCIImage = corrected
             capturedNormalizedCorners = normalized

@@ -92,8 +92,10 @@ struct GalleryDetailOverlay: View {
     let onDismiss: () -> Void
 
     @EnvironmentObject var store: GalleryStore
+    @EnvironmentObject var proStore: ProStore
     @State private var fullResImage: UIImage? = nil
     @State private var showShareSheet = false
+    @State private var showPaywall    = false
     @State private var downloadedBadge = false
 
     // Zoom + pan state
@@ -144,8 +146,12 @@ struct GalleryDetailOverlay: View {
                     Button(action: { showShareSheet = true }) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
-                    Button(action: downloadToPhotos) {
-                        Label("Download", systemImage: "arrow.down.to.line")
+                    Button(action: {
+                        if proStore.canExportToGallery { downloadToPhotos() }
+                        else { showPaywall = true }
+                    }) {
+                        Label(proStore.canExportToGallery ? "Download" : "Download (Pro)",
+                              systemImage: "arrow.down.to.line")
                     }
                     Button(role: .destructive, action: {
                         store.delete(item)
@@ -192,6 +198,7 @@ struct GalleryDetailOverlay: View {
         .sheet(isPresented: $showShareSheet) {
             if let img = shownImage { ShareSheet(items: [img]) }
         }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     // MARK: - Zoom

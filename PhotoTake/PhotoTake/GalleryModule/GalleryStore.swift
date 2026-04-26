@@ -21,7 +21,7 @@ final class GalleryStore: ObservableObject {
         load()
     }
 
-    func save(image: CIImage, context: CIContext, quality: CGFloat = 0.92) {
+    func save(image: CIImage, context: CIContext, quality: CGFloat = 0.92, watermark: Bool = false) {
         let capturedDir = self.dir
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
@@ -31,8 +31,12 @@ final class GalleryStore: ObservableObject {
                 let id = UUID().uuidString
                 let url = capturedDir.appendingPathComponent("\(id).jpg")
 
-                guard let cgImage = context.createCGImage(image, from: image.extent),
-                      let data = UIImage(cgImage: cgImage).jpegData(compressionQuality: quality)
+                guard let cgImage = context.createCGImage(image, from: image.extent) else {
+                    throw GalleryError.encodingFailed
+                }
+                var uiImage = UIImage(cgImage: cgImage)
+                if watermark { uiImage = Watermark.apply(to: uiImage) }
+                guard let data = uiImage.jpegData(compressionQuality: quality)
                 else { throw GalleryError.encodingFailed }
 
                 try data.write(to: url)

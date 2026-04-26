@@ -7,12 +7,14 @@ struct EditView: View {
     @EnvironmentObject var galleryStore: GalleryStore
     @Environment(\.dismiss) var dismiss
 
+    @EnvironmentObject var proStore: ProStore
     @State private var adjustments: Adjustments
     @State private var previewUIImage: UIImage?
     @State private var showShareSheet = false
     @State private var saveState: SaveState = .idle
     @State private var saveQuality: SaveQuality = .high
-    @State private var showGallery = false
+    @State private var showGallery  = false
+    @State private var showPaywall  = false
 
     private enum SaveState { case idle, saving, saved }
     private enum SaveQuality: String, CaseIterable {
@@ -45,9 +47,11 @@ struct EditView: View {
         }
         .navigationDestination(isPresented: $showGallery) { GalleryView() }
         .task(id: adjustments) { await updatePreview() }
+        .onAppear { enforceFreeConstraints() }
         .sheet(isPresented: $showShareSheet) {
             if let img = previewUIImage { ShareSheet(items: [img]) }
         }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     // MARK: - Preview
@@ -91,8 +95,13 @@ struct EditView: View {
                 HStack(spacing: DS.Spacing.sm) {
                     toggleButton(label: "INVERT", systemImage: "circle.lefthalf.filled",
                                  isOn: $adjustments.invert)
-                    toggleButton(label: "B/W", systemImage: "camera.filters",
-                                 isOn: $adjustments.blackAndWhite)
+                    if proStore.canUseColor {
+                        toggleButton(label: "B/W", systemImage: "camera.filters",
+                                     isOn: $adjustments.blackAndWhite)
+                    } else {
+                        // Free: B/W is always on, locked behind Pro
+                        proLockedButton(label: "B/W", systemImage: "camera.filters")
+                    }
                 }
 
                 Divider().background(DS.Color.surfaceSecondary)
@@ -222,10 +231,35 @@ struct EditView: View {
         .disabled(previewUIImage == nil)
     }
 
+    private func proLockedButton(label: String, systemImage: String) -> some View {
+        Button(action: { showPaywall = true }) {
+            HStack(spacing: DS.Spacing.xs) {
+                Image(systemName: systemImage)
+                Text(label).font(DS.Font.mono)
+                Image(systemName: "lock.fill").font(.system(size: 10))
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.sm)
+            .frame(maxWidth: .infinity)
+            .background(DS.Color.accent)
+            .foregroundStyle(DS.Color.background)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+        }
+    }
+
+    private func enforceFreeConstraints() {
+        guard !proStore.canUseColor else { return }
+        adjustments.blackAndWhite = true
+        adjustments.saturation = 0
+    }
+
     private func saveToGallery() {
+        guard proStore.canExportToGallery else { showPaywall = true; return }
         saveState = .saving
         let processed = AdjustmentPipeline.apply(capturedImage, adj: adjustments)
-        galleryStore.save(image: processed, context: ciContext, quality: saveQuality.compression)
+        galleryStore.save(image: processed, context: ciContext,
+                          quality: saveQuality.compression,
+                          watermark: proStore.needsWatermark)
         Task {
             try? await Task.sleep(for: .milliseconds(600))
             saveState = .saved
