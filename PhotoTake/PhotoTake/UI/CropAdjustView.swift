@@ -118,12 +118,26 @@ struct CropAdjustView: View {
     // MARK: - Apply
 
     private func applyCorrection() {
-        let imageSize = CGSize(width: rawImage.extent.width, height: rawImage.extent.height)
-        let pixelCorners = PerspectiveCorrector.viewCornersToImagePixels(
-            corners: corners,
-            viewSize: displaySize,
-            imageSize: imageSize
-        )
+        let imgW = rawImage.extent.width
+        let imgH = rawImage.extent.height
+
+        // The image is rendered with .scaledToFill: one uniform scale factor,
+        // centered, with the excess dimension(s) clipped.
+        let scale = max(displaySize.width / imgW, displaySize.height / imgH)
+
+        // How many display-space points of each dimension are hidden (off-screen)
+        let hiddenX = (imgW * scale - displaySize.width)  / 2
+        let hiddenY = (imgH * scale - displaySize.height) / 2
+
+        // Map each view corner (UIKit, origin top-left) back to image pixel
+        // coordinates (CIImage, origin bottom-left).
+        let pixelCorners = corners.map { pt in
+            CGPoint(
+                x: (pt.x + hiddenX) / scale,
+                y: imgH - (pt.y + hiddenY) / scale
+            )
+        }
+
         correctedImage = PerspectiveCorrector.correct(image: rawImage, quad: pixelCorners) ?? rawImage
         navigateToEdit = true
     }
