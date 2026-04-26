@@ -304,15 +304,13 @@ struct ScanView: View {
         let ctx = ciContext
 
         Task {
-            guard let pixelBuffer = await withCheckedContinuation(
-                { (cont: CheckedContinuation<CVPixelBuffer?, Never>) in
-                    cameraSession.capturePhoto { buf in cont.resume(returning: buf) }
+            guard let raw = await withCheckedContinuation(
+                { (cont: CheckedContinuation<CIImage?, Never>) in
+                    cameraSession.capturePhoto { img in cont.resume(returning: img) }
                 })
             else { return }
 
-            let raw = CIImage(cvPixelBuffer: pixelBuffer)
-            let imgSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer),
-                                 height: CVPixelBufferGetHeight(pixelBuffer))
+            let imgSize = CGSize(width: raw.extent.width, height: raw.extent.height)
             let pixelCorners = PerspectiveCorrector.viewCornersToImagePixels(
                 corners: corners, viewSize: size, imageSize: imgSize)
             let corrected = PerspectiveCorrector.correct(image: raw, quad: pixelCorners) ?? raw

@@ -1,9 +1,11 @@
 import AVFoundation
+import CoreImage
 import Combine
 
 final class CameraSession: NSObject, ObservableObject {
     let session = AVCaptureSession()
-    private let output = AVCaptureVideoDataOutput()
+    private let videoOutput = AVCaptureVideoDataOutput()
+    private let photoOutput = AVCapturePhotoOutput()
     private let sessionQueue = DispatchQueue(label: "camera.session", qos: .userInitiated)
 
     // Preview (MTKView) — set by CameraPreviewView
@@ -14,7 +16,7 @@ final class CameraSession: NSObject, ObservableObject {
     @Published var isRunning = false
     @Published var error: CameraError?
 
-    private var photoCaptureCompletion: ((CVPixelBuffer?) -> Void)?
+    private var photoCaptureCompletion: ((CIImage?) -> Void)?
 
     func start() {
         sessionQueue.async { [weak self] in self?.configure() }
@@ -27,11 +29,20 @@ final class CameraSession: NSObject, ObservableObject {
         }
     }
 
-    func capturePhoto(completion: @escaping (CVPixelBuffer?) -> Void) {
+    func capturePhoto(completion: @escaping (CIImage?) -> Void) {
         photoCaptureCompletion = completion
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            var settings = AVCapturePhotoSettings()
+            // Request maximum sensor resolution
+            settings.maxPhotoDimensions = self.photoOutput.maxPhotoDimensions
+            self.photoOutput.capturePhoto(with: settings, delegate: self)
+        }
     }
 
     private func configure() {
+        guard !session.isRunning else { return }
+
         session.sessionPreset = .photo
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera,
                                                     for: .video, position: .back),
@@ -44,15 +55,25 @@ final class CameraSession: NSObject, ObservableObject {
         session.beginConfiguration()
         if session.canAddInput(input) { session.addInput(input) }
 
-        output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera.frames", qos: .userInitiated))
-        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
-        output.alwaysDiscardsLateVideoFrames = true
+        // Video output — live preview and rectangle detection
+        videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera.frames", qos: .userInitiated))
+        videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        videoOutput.alwaysDiscardsLateVideoFrames = true
+        if session.canAddOutput(videoOutput) { session.addOutput(videoOutput) }
 
-        if session.canAddOutput(output) { session.addOutput(output) }
-
-        if let connection = output.connection(with: .video),
+        if let connection = videoOutput.connection(with: .video),
            connection.isVideoRotationAngleSupported(90) {
             connection.videoRotationAngle = 90
+        }
+
+        // Photo output — full-resolution still capture
+        if session.canAddOutput(photoOutput) {
+            session.addOutput(photoOutput)
+            // Pick the largest dimension the active format supports
+            if let maxDims = device.activeFormat.supportedMaxPhotoDimensions
+                .max(by: { Int($0.width) * Int($0.height) < Int($1.width) * Int($1.height) }) {
+                photoOutput.maxPhotoDimensions = maxDims
+            }
         }
 
         session.commitConfiguration()
@@ -61,20 +82,41 @@ final class CameraSession: NSObject, ObservableObject {
     }
 }
 
+// MARK: - Video delegate (preview + detection)
+
 extension CameraSession: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         guard let buf = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        onFrame?(buf)
+        onProcessingFrame?(buf)
+    }
+}
 
-        if let completion = photoCaptureCompletion {
-            photoCaptureCompletion = nil
-            completion(buf)
+// MARK: - Photo delegate (full-res still)
+
+extension CameraSession: AVCapturePhotoCaptureDelegate {
+    func photoOutput(_ output: AVCapturePhotoOutput,
+                     didFinishProcessingPhoto photo: AVCapturePhoto,
+                     error: Error?) {
+        defer {
+            DispatchQueue.main.async { [weak self] in self?.photoCaptureCompletion = nil }
+        }
+        guard error == nil, let data = photo.fileDataRepresentation() else {
+            DispatchQueue.main.async { [weak self] in self?.photoCaptureCompletion?(nil) }
             return
         }
 
-        onFrame?(buf)
-        onProcessingFrame?(buf)
+        // Apply EXIF orientation so the CIImage is upright (portrait)
+        var ci = CIImage(data: data)
+        if let orientationVal = ci?.properties[kCGImagePropertyOrientation as String] as? UInt32,
+           let exifOrientation = CGImagePropertyOrientation(rawValue: orientationVal),
+           let oriented = ci?.oriented(exifOrientation) {
+            ci = oriented
+        }
+
+        DispatchQueue.main.async { [weak self] in self?.photoCaptureCompletion?(ci) }
     }
 }
 
