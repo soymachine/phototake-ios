@@ -24,6 +24,9 @@
 		C43A1B2B18D950E2398C167E /* CropAdjustView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6052563280B6756C2664326F /* CropAdjustView.swift */; };
 		291A0CD6E5855F19A85B78AA /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74F9311C7DDD51B10D2B0664 /* ContentView.swift */; };
 		6671672A3AA75F68D3D59AB3 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EAE74442F9F8B452209E25C2 /* Info.plist */; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* ProStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E2D3C4B5A6F7E8D9C0B1A2 /* ProStore.swift */; };
+		1A2B3C4D5E6F1A2B3C4D5E6F /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3C4D5E6F7A2B3C4D5E6F7A /* PaywallView.swift */; };
+		3C4D5E6F7A8B3C4D5E6F7A8B /* FreeConstraints.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5E6F7A8B9C4D5E6F7A8B9C /* FreeConstraints.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +48,9 @@
 		74F9311C7DDD51B10D2B0664 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		EAE74442F9F8B452209E25C2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		EA91C95D800F1BD325F8E6EB /* PhotoTake.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PhotoTake.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1E2D3C4B5A6F7E8D9C0B1A2 /* ProStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProStore.swift; sourceTree = "<group>"; };
+		2B3C4D5E6F7A2B3C4D5E6F7A /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		4D5E6F7A8B9C4D5E6F7A8B9C /* FreeConstraints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FreeConstraints.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,6 +109,16 @@
 			path = ExportModule;
 			sourceTree = "<group>";
 		};
+		5E6F7A8B9C0D5E6F7A8B9C0D /* ProModule */ = {
+			isa = PBXGroup;
+			children = (
+				F1E2D3C4B5A6F7E8D9C0B1A2 /* ProStore.swift */,
+				2B3C4D5E6F7A2B3C4D5E6F7A /* PaywallView.swift */,
+				4D5E6F7A8B9C4D5E6F7A8B9C /* FreeConstraints.swift */,
+			);
+			path = ProModule;
+			sourceTree = "<group>";
+		};
 		0E0FD26A23B32074ACF85910 /* UI */ = {
 			isa = PBXGroup;
 			children = (
@@ -124,6 +140,7 @@
 				227036B9886C9A633586522E /* ProcessingModule */,
 				437A52BC864289321029970E /* GalleryModule */,
 				474C4749D48ED579B2D68CBB /* ExportModule */,
+				5E6F7A8B9C0D5E6F7A8B9C0D /* ProModule */,
 				0E0FD26A23B32074ACF85910 /* UI */,
 				EAE74442F9F8B452209E25C2 /* Info.plist */,
 			);
@@ -230,6 +247,9 @@
 				3EA947AFA9A19D57058DB640 /* ScanView.swift in Sources */,
 				C43A1B2B18D950E2398C167E /* CropAdjustView.swift in Sources */,
 				291A0CD6E5855F19A85B78AA /* ContentView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* ProStore.swift in Sources */,
+				1A2B3C4D5E6F1A2B3C4D5E6F /* PaywallView.swift in Sources */,
+				3C4D5E6F7A8B3C4D5E6F7A8B /* FreeConstraints.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
