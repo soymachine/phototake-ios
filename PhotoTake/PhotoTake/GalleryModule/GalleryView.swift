@@ -147,10 +147,10 @@ struct GalleryDetailOverlay: View {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
                     Button(action: {
-                        if proStore.canExportToGallery { downloadToPhotos() }
+                        if proStore.canDownloadToPhotos { downloadToPhotos() }
                         else { showPaywall = true }
                     }) {
-                        Label(proStore.canExportToGallery ? "Download" : "Download (Pro)",
+                        Label(proStore.canDownloadToPhotos ? "Download" : "Download (Pro)",
                               systemImage: "arrow.down.to.line")
                     }
                     Button(role: .destructive, action: {

@@ -282,7 +282,7 @@ private struct Feature: Identifiable {
         Feature(label: "Scans/month",  freeValue: "10",     proValue: "∞"),
         Feature(label: "Resolution",   freeValue: "1080p",  proValue: "Full"),
         Feature(label: "Color output", freeValue: "B/W",    proValue: "Color", proIcon: true),
-        Feature(label: "Save to Gallery", freeValue: "—",   proValue: "",      proIcon: true),
+        Feature(label: "Download to Photos", freeValue: "—", proValue: "",      proIcon: true),
         Feature(label: "Watermark",    freeValue: "Subtle", proValue: "None",  proIcon: false),
     ]
 }

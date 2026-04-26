@@ -100,7 +100,6 @@ struct ScanView: View {
             if capturedPreviewUIImage == nil {
                 VStack(spacing: 0) {
                     Spacer()
-                    modeSelector
                     shutterBar(safeBottom: geo.safeAreaInsets.bottom)
                 }
             }
@@ -178,31 +177,6 @@ struct ScanView: View {
         .padding(.vertical, 6)
         .background(.ultraThinMaterial)
         .clipShape(Capsule())
-    }
-
-    // MARK: - Mode selector
-
-    private var modeSelector: some View {
-        HStack(spacing: 10) {
-            ForEach(ScanMode.allCases, id: \.self) { mode in
-                Button {
-                    withAnimation(.spring(duration: 0.2)) { scanMode = mode }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: mode.icon)
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(mode.rawValue)
-                            .font(DS.Font.monoCaption)
-                    }
-                    .foregroundStyle(scanMode == mode ? DS.Color.background : DS.Color.textSecondary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(scanMode == mode ? DS.Color.accent : Color.white.opacity(0.12))
-                    .clipShape(Capsule())
-                }
-            }
-        }
-        .padding(.bottom, 16)
     }
 
     // MARK: - Shutter bar

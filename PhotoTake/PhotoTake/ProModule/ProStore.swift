@@ -17,11 +17,13 @@ final class ProStore: ObservableObject {
 
     // MARK: - Computed gates
 
-    var canScan: Bool            { isPro || scansThisMonth < Self.freeMonthlyLimit }
-    var scansRemaining: Int      { max(0, Self.freeMonthlyLimit - scansThisMonth) }
-    var canUseColor: Bool        { isPro }
-    var canExportToGallery: Bool { isPro }
-    var needsWatermark: Bool     { !isPro }
+    var canScan: Bool             { isPro || scansThisMonth < Self.freeMonthlyLimit }
+    var scansRemaining: Int       { max(0, Self.freeMonthlyLimit - scansThisMonth) }
+    var canUseColor: Bool         { isPro }
+    /// Save to in-app gallery: always allowed; Pro removes watermark + enables full res.
+    /// Download to system Photos app: Pro only.
+    var canDownloadToPhotos: Bool { isPro }
+    var needsWatermark: Bool      { !isPro }
 
     // MARK: - Persistence keys
 

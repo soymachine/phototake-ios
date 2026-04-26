@@ -254,7 +254,6 @@ struct EditView: View {
     }
 
     private func saveToGallery() {
-        guard proStore.canExportToGallery else { showPaywall = true; return }
         saveState = .saving
         let processed = AdjustmentPipeline.apply(capturedImage, adj: adjustments)
         galleryStore.save(image: processed, context: ciContext,
