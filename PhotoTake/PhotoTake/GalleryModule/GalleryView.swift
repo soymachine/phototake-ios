@@ -94,9 +94,14 @@ struct GalleryDetailOverlay: View {
     @EnvironmentObject var store: GalleryStore
     @State private var fullResImage: UIImage? = nil
     @State private var showShareSheet = false
+    @State private var downloadedBadge = false
 
-    // Thumbnail decoded directly from in-memory Data — always available synchronously.
-    // fullResImage replaces it once the background load completes.
+    // Zoom + pan state
+    @State private var zoomScale: CGFloat = 1.0
+    @State private var lastZoomScale: CGFloat = 1.0
+    @State private var dragOffset: CGSize = .zero
+    @State private var lastDragOffset: CGSize = .zero
+
     private var shownImage: UIImage? {
         fullResImage ?? item.thumbData.flatMap { UIImage(data: $0) }
     }
@@ -109,8 +114,12 @@ struct GalleryDetailOverlay: View {
                 Image(uiImage: img)
                     .resizable()
                     .scaledToFit()
-                    .padding(DS.Spacing.md)
+                    .scaleEffect(zoomScale)
+                    .offset(dragOffset)
+                    .animation(.interactiveSpring(), value: zoomScale)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .gesture(zoomGesture)
+                    .onTapGesture(count: 2) { resetZoom() }
                     .animation(.easeInOut(duration: 0.2), value: fullResImage != nil)
             } else {
                 ProgressView()
@@ -135,6 +144,9 @@ struct GalleryDetailOverlay: View {
                     Button(action: { showShareSheet = true }) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
+                    Button(action: downloadToPhotos) {
+                        Label("Download", systemImage: "arrow.down.to.line")
+                    }
                     Button(role: .destructive, action: {
                         store.delete(item)
                         onDismiss()
@@ -150,6 +162,22 @@ struct GalleryDetailOverlay: View {
             }
             .padding(.vertical, 12)
             .background(.ultraThinMaterial)
+
+            // Download confirmation badge
+            if downloadedBadge {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark")
+                    Text("Saved to Photos").font(DS.Font.monoCaption)
+                }
+                .foregroundStyle(DS.Color.background)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(DS.Color.accent)
+                .clipShape(Capsule())
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 32)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
         .preferredColorScheme(.dark)
         .task {
@@ -163,6 +191,54 @@ struct GalleryDetailOverlay: View {
         }
         .sheet(isPresented: $showShareSheet) {
             if let img = shownImage { ShareSheet(items: [img]) }
+        }
+    }
+
+    // MARK: - Zoom
+
+    private var zoomGesture: some Gesture {
+        SimultaneousGesture(
+            MagnificationGesture()
+                .onChanged { value in
+                    zoomScale = max(1.0, lastZoomScale * value)
+                }
+                .onEnded { _ in
+                    lastZoomScale = zoomScale
+                },
+            DragGesture()
+                .onChanged { value in
+                    guard zoomScale > 1 else { return }
+                    dragOffset = CGSize(
+                        width: lastDragOffset.width + value.translation.width,
+                        height: lastDragOffset.height + value.translation.height
+                    )
+                }
+                .onEnded { _ in
+                    if zoomScale <= 1 { resetZoom() } else { lastDragOffset = dragOffset }
+                }
+        )
+    }
+
+    private func resetZoom() {
+        withAnimation(.spring(duration: 0.3)) {
+            zoomScale = 1.0
+            lastZoomScale = 1.0
+            dragOffset = .zero
+            lastDragOffset = .zero
+        }
+    }
+
+    // MARK: - Download
+
+    private func downloadToPhotos() {
+        guard let img = shownImage else { return }
+        ExportController.saveToPhotos(img) { ok, _ in
+            guard ok else { return }
+            withAnimation { downloadedBadge = true }
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                withAnimation { downloadedBadge = false }
+            }
         }
     }
 }

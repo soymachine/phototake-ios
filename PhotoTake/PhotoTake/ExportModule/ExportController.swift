@@ -10,14 +10,18 @@ enum ExportController {
             completion(false, ExportError.renderFailed)
             return
         }
-        let uiImage = UIImage(cgImage: cgImage)
+        saveToPhotos(UIImage(cgImage: cgImage), completion: completion)
+    }
+
+    static func saveToPhotos(_ image: UIImage,
+                             completion: @escaping (Bool, Error?) -> Void) {
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
             guard status == .authorized || status == .limited else {
                 DispatchQueue.main.async { completion(false, ExportError.permissionDenied) }
                 return
             }
             PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.creationRequestForAsset(from: uiImage)
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
             }) { ok, error in
                 DispatchQueue.main.async { completion(ok, error) }
             }

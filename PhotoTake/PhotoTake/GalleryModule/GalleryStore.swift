@@ -21,7 +21,7 @@ final class GalleryStore: ObservableObject {
         load()
     }
 
-    func save(image: CIImage, context: CIContext) {
+    func save(image: CIImage, context: CIContext, quality: CGFloat = 0.92) {
         let capturedDir = self.dir
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
@@ -31,9 +31,8 @@ final class GalleryStore: ObservableObject {
                 let id = UUID().uuidString
                 let url = capturedDir.appendingPathComponent("\(id).jpg")
 
-                // Render via CGImage then UIImage — more reliable than heifRepresentation
                 guard let cgImage = context.createCGImage(image, from: image.extent),
-                      let data = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.92)
+                      let data = UIImage(cgImage: cgImage).jpegData(compressionQuality: quality)
                 else { throw GalleryError.encodingFailed }
 
                 try data.write(to: url)

@@ -10,11 +10,16 @@ struct EditView: View {
     @State private var adjustments: Adjustments
     @State private var previewUIImage: UIImage?
     @State private var showShareSheet = false
-    @State private var shareImage: UIImage?
     @State private var saveState: SaveState = .idle
+    @State private var saveQuality: SaveQuality = .high
     @State private var showGallery = false
 
     private enum SaveState { case idle, saving, saved }
+    private enum SaveQuality: String, CaseIterable {
+        case high = "HIGH"
+        case medium = "MED"
+        var compression: CGFloat { self == .high ? 0.92 : 0.65 }
+    }
 
     init(capturedImage: CIImage, ciContext: CIContext,
          initialAdjustments: Adjustments = .default) {
@@ -41,7 +46,7 @@ struct EditView: View {
         .navigationDestination(isPresented: $showGallery) { GalleryView() }
         .task(id: adjustments) { await updatePreview() }
         .sheet(isPresented: $showShareSheet) {
-            if let img = shareImage { ShareSheet(items: [img]) }
+            if let img = previewUIImage { ShareSheet(items: [img]) }
         }
     }
 
@@ -122,16 +127,35 @@ struct EditView: View {
         Group {
             switch saveState {
             case .idle:
-                Button(action: saveToGallery) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "square.and.arrow.down")
-                        Text("Save").font(DS.Font.mono)
+                VStack(spacing: DS.Spacing.xs) {
+                    // Quality picker
+                    HStack(spacing: 0) {
+                        ForEach(SaveQuality.allCases, id: \.self) { q in
+                            Button(action: { saveQuality = q }) {
+                                Text(q.rawValue)
+                                    .font(DS.Font.monoCaption)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 7)
+                                    .background(saveQuality == q ? DS.Color.accent : DS.Color.surface)
+                                    .foregroundStyle(saveQuality == q ? DS.Color.background : DS.Color.textSecondary)
+                            }
+                        }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, DS.Spacing.sm)
-                    .background(DS.Color.surfaceSecondary)
-                    .foregroundStyle(DS.Color.textPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+                    .overlay(RoundedRectangle(cornerRadius: DS.Corner.sm).stroke(DS.Color.surfaceSecondary, lineWidth: 1))
+
+                    // Save button
+                    Button(action: saveToGallery) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "square.and.arrow.down")
+                            Text("Save").font(DS.Font.mono)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DS.Spacing.sm)
+                        .background(DS.Color.surfaceSecondary)
+                        .foregroundStyle(DS.Color.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Corner.sm))
+                    }
                 }
 
             case .saving:
@@ -192,19 +216,16 @@ struct EditView: View {
     // MARK: - Actions
 
     private var shareButton: some View {
-        Button(action: {
-            let processed = AdjustmentPipeline.apply(capturedImage, adj: adjustments)
-            shareImage = ExportController.makeShareImage(processed, context: ciContext)
-            showShareSheet = true
-        }) {
+        Button(action: { showShareSheet = true }) {
             Image(systemName: "square.and.arrow.up").foregroundStyle(DS.Color.accent)
         }
+        .disabled(previewUIImage == nil)
     }
 
     private func saveToGallery() {
         saveState = .saving
         let processed = AdjustmentPipeline.apply(capturedImage, adj: adjustments)
-        galleryStore.save(image: processed, context: ciContext)
+        galleryStore.save(image: processed, context: ciContext, quality: saveQuality.compression)
         Task {
             try? await Task.sleep(for: .milliseconds(600))
             saveState = .saved
