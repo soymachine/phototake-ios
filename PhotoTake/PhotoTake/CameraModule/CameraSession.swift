@@ -130,13 +130,15 @@ final class CameraSession: NSObject, ObservableObject {
         DispatchQueue.main.async { self.isRunning = true }
 
         #if DEBUG
-        let vd = device.activeFormat.formatDescription.dimensions
-        let pd = maxPhotoDims
-        let cafOK = device.isFocusModeSupported(.continuousAutoFocus)
-        let poiOK = device.isFocusPointOfInterestSupported
-        let preset = session.sessionPreset.rawValue.components(separatedBy: ".").last ?? "?"
+        let vd  = device.activeFormat.formatDescription.dimensions
+        let pd  = maxPhotoDims
+        let fps = device.activeFormat.videoSupportedFrameRateRanges
+                      .map { $0.maxFrameRate }.max().map { Int($0) } ?? 0
+        let cafOK  = device.isFocusModeSupported(.continuousAutoFocus)
+        let poiOK  = device.isFocusPointOfInterestSupported
+        let preset = session.sessionPreset == .inputPriority ? "inputPriority" : "photo"
         DispatchQueue.main.async {
-            self.debugInfo = "video \(vd.width)×\(vd.height) | photo \(pd.width)×\(pd.height) | preset:\(preset) | CAF:\(cafOK) POI:\(poiOK) | AF pending…"
+            self.debugInfo = "video \(vd.width)×\(vd.height)@\(fps)fps | photo \(pd.width)×\(pd.height) | \(preset) | CAF:\(cafOK) POI:\(poiOK) | AF…"
         }
         #endif
 
@@ -170,28 +172,32 @@ final class CameraSession: NSObject, ObservableObject {
         device.unlockForConfiguration()
     }
 
-    // Find format with the highest photo resolution that also provides ≥1080p video
+    // Find a true video format (≥60fps = not a photo-mode format) with the best
+    // video resolution for sharp live preview. Photo formats top out at 30fps and
+    // use slow settle-and-lock AF even when continuousAutoFocus is nominally set.
     private func bestPhotoVideoFormat(for device: AVCaptureDevice) -> AVCaptureDevice.Format? {
         device.formats
             .filter { fmt in
                 guard fmt.mediaType == .video else { return false }
                 let d = fmt.formatDescription.dimensions
                 guard d.width >= 1920 || d.height >= 1920 else { return false }
-                guard fmt.videoSupportedFrameRateRanges.contains(where: { $0.maxFrameRate >= 30 })
+                // ≥60fps discriminates video formats from photo-mode formats
+                guard fmt.videoSupportedFrameRateRanges.contains(where: { $0.maxFrameRate >= 60 })
                 else { return false }
                 return !fmt.supportedMaxPhotoDimensions.isEmpty
             }
             .max { a, b in
-                let aP = a.supportedMaxPhotoDimensions
-                    .map { Int($0.width) * Int($0.height) }.max() ?? 0
-                let bP = b.supportedMaxPhotoDimensions
-                    .map { Int($0.width) * Int($0.height) }.max() ?? 0
-                if aP != bP { return aP < bP }
+                // Prefer highest video resolution for sharpest preview
                 let aV = Int(a.formatDescription.dimensions.width) *
                          Int(a.formatDescription.dimensions.height)
                 let bV = Int(b.formatDescription.dimensions.width) *
                          Int(b.formatDescription.dimensions.height)
-                return aV < bV
+                if aV != bV { return aV < bV }
+                let aP = a.supportedMaxPhotoDimensions
+                    .map { Int($0.width) * Int($0.height) }.max() ?? 0
+                let bP = b.supportedMaxPhotoDimensions
+                    .map { Int($0.width) * Int($0.height) }.max() ?? 0
+                return aP < bP
             }
     }
 
