@@ -55,6 +55,7 @@ struct ScanView: View {
     // Focus indicator
     @State private var focusIndicatorPoint: CGPoint? = nil
     @State private var safeAreaInsets: EdgeInsets = .init()
+    @State private var previewLayerView: PreviewLayerView?
 
     // Navigation
     @State private var showCrop     = false
@@ -68,8 +69,10 @@ struct ScanView: View {
         GeometryReader { geo in
             Color.black
 
-            CameraPreviewView(session: cameraSession)
-                .onAppear {
+            CameraPreviewView(session: cameraSession) { view in
+                previewLayerView = view
+            }
+            .onAppear {
                     overlaySize = geo.size
                     safeAreaInsets = geo.safeAreaInsets
                     cameraSession.start()
@@ -393,7 +396,13 @@ struct ScanView: View {
 
     private func focusAt(_ point: CGPoint, viewSize: CGSize) {
         focusIndicatorPoint = point
-        cameraSession.focus(at: point, in: viewSize)
+        let devicePoint: CGPoint
+        if let layer = previewLayerView?.videoPreviewLayer {
+            devicePoint = layer.captureDevicePointConverted(fromLayerPoint: point)
+        } else {
+            devicePoint = CGPoint(x: point.x / viewSize.width, y: point.y / viewSize.height)
+        }
+        cameraSession.focus(atDevicePoint: devicePoint)
         Task {
             try? await Task.sleep(for: .seconds(1.5))
             withAnimation(.easeOut(duration: 0.3)) { focusIndicatorPoint = nil }

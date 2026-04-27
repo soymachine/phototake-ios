@@ -3,11 +3,13 @@ import SwiftUI
 
 struct CameraPreviewView: UIViewRepresentable {
     let session: CameraSession
+    var onPreviewViewReady: ((PreviewLayerView) -> Void)?
 
     func makeUIView(context: Context) -> PreviewLayerView {
         let view = PreviewLayerView()
         view.videoPreviewLayer.session = session.session
         view.videoPreviewLayer.videoGravity = .resizeAspectFill
+        onPreviewViewReady?(view)
         return view
     }
 

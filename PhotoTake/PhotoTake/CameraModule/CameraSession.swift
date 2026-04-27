@@ -44,11 +44,13 @@ final class CameraSession: NSObject, ObservableObject {
 
     // MARK: - Focus
 
-    func focus(at viewPoint: CGPoint, in viewSize: CGSize) {
+    /// devicePoint must already be in AVCaptureDevice coordinates (0-1, origin bottom-left).
+    /// Use AVCaptureVideoPreviewLayer.captureDevicePointConverted(fromLayerPoint:) at the call site.
+    func focus(atDevicePoint devicePoint: CGPoint) {
         guard let device = captureDevice else { return }
         let pt = CGPoint(
-            x: max(0, min(1, viewPoint.x / viewSize.width)),
-            y: max(0, min(1, viewPoint.y / viewSize.height))
+            x: max(0, min(1, devicePoint.x)),
+            y: max(0, min(1, devicePoint.y))
         )
         sessionQueue.async {
             guard (try? device.lockForConfiguration()) != nil else { return }
@@ -159,11 +161,15 @@ final class CameraSession: NSObject, ObservableObject {
         }
         #endif
         guard locked else { return }
-        if device.isFocusModeSupported(.continuousAutoFocus) {
-            device.focusMode = .continuousAutoFocus
+        // First trigger one-shot sweep so the lens actively searches from its current position.
+        // This prevents the "immediately locked at wrong distance" problem on video formats.
+        if device.isFocusModeSupported(.autoFocus) {
+            device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
+            device.focusMode = .autoFocus
         }
-        if device.isExposureModeSupported(.continuousAutoExposure) {
-            device.exposureMode = .continuousAutoExposure
+        if device.isExposureModeSupported(.autoExpose) {
+            device.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
+            device.exposureMode = .autoExpose
         }
         device.isSubjectAreaChangeMonitoringEnabled = true
         #if DEBUG
@@ -172,6 +178,25 @@ final class CameraSession: NSObject, ObservableObject {
         }
         #endif
         device.unlockForConfiguration()
+
+        // After the one-shot sweep completes, switch to continuous tracking
+        sessionQueue.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, let device = self.captureDevice,
+                  (try? device.lockForConfiguration()) != nil else { return }
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            device.unlockForConfiguration()
+            #if DEBUG
+            DispatchQueue.main.async {
+                self.debugInfo = self.debugInfo.replacingOccurrences(
+                    of: #"mode:\d→\d"#, with: "mode:CAF", options: .regularExpression)
+            }
+            #endif
+        }
 
         // KVO: show whether the lens is physically moving
         focusObserver = device.observe(\.isAdjustingFocus, options: .new) { [weak self] dev, _ in
