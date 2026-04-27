@@ -13,6 +13,9 @@ final class CameraSession: NSObject, ObservableObject {
 
     @Published var isRunning = false
     @Published var error: CameraError?
+    #if DEBUG
+    @Published var debugInfo: String = "–"
+    #endif
 
     private var photoCaptureCompletion: ((CIImage?) -> Void)?
     private var captureDevice: AVCaptureDevice?
@@ -126,6 +129,17 @@ final class CameraSession: NSObject, ObservableObject {
         session.startRunning()
         DispatchQueue.main.async { self.isRunning = true }
 
+        #if DEBUG
+        let vd = device.activeFormat.formatDescription.dimensions
+        let pd = photoMaxDims
+        let cafOK = device.isFocusModeSupported(.continuousAutoFocus)
+        let poiOK = device.isFocusPointOfInterestSupported
+        let preset = session.sessionPreset.rawValue.components(separatedBy: ".").last ?? "?"
+        DispatchQueue.main.async {
+            self.debugInfo = "video \(vd.width)×\(vd.height) | photo \(pd.width)×\(pd.height) | preset:\(preset) | CAF:\(cafOK) POI:\(poiOK) | AF pending…"
+        }
+        #endif
+
         // Enable continuous AF after the session is fully running
         sessionQueue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.enableContinuousAF()
@@ -133,14 +147,26 @@ final class CameraSession: NSObject, ObservableObject {
     }
 
     private func enableContinuousAF() {
-        guard let device = captureDevice,
-              (try? device.lockForConfiguration()) != nil else { return }
+        guard let device = captureDevice else { return }
+        let locked = (try? device.lockForConfiguration()) != nil
+        #if DEBUG
+        DispatchQueue.main.async {
+            self.debugInfo = (self.debugInfo.replacingOccurrences(of: " | AF pending…", with: ""))
+                + " | lock:\(locked) mode:\(device.focusMode.rawValue)"
+        }
+        #endif
+        guard locked else { return }
         if device.isFocusModeSupported(.continuousAutoFocus) {
             device.focusMode = .continuousAutoFocus
         }
         if device.isExposureModeSupported(.continuousAutoExposure) {
             device.exposureMode = .continuousAutoExposure
         }
+        #if DEBUG
+        DispatchQueue.main.async {
+            self.debugInfo += "→\(device.focusMode.rawValue)"
+        }
+        #endif
         device.unlockForConfiguration()
     }
 
