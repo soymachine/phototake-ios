@@ -120,22 +120,6 @@ struct ScanView: View {
                     .allowsHitTesting(false)
             }
 
-            #if DEBUG
-            // Debug overlay — camera config info
-            if capturedPreviewUIImage == nil {
-                Text(cameraSession.debugInfo)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.yellow)
-                    .multilineTextAlignment(.leading)
-                    .padding(8)
-                    .background(Color.black.opacity(0.72))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .allowsHitTesting(false)
-            }
-            #endif
-
             // Mode selector + shutter bar at bottom
             if capturedPreviewUIImage == nil {
                 VStack(spacing: 0) {
