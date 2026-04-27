@@ -359,8 +359,11 @@ struct ScanView: View {
 
     private var fullFrameCorners: [CGPoint] {
         let s = overlaySize
-        let topY    = safeAreaInsets.top + 80      // below badges / dynamic island
-        let bottomY = s.height - safeAreaInsets.bottom - 130  // above shutter bar + home indicator
+        // safeAreaInsets may report 0 inside ignoresSafeArea; clamp to device minimum
+        let safeTop    = max(safeAreaInsets.top, 50)
+        let safeBottom = max(safeAreaInsets.bottom, 20)
+        let topY    = safeTop + 120     // well below Dynamic Island + badges
+        let bottomY = s.height - safeBottom - 150  // above shutter bar + home indicator
         let sideX: CGFloat = 32
         return [
             CGPoint(x: sideX,          y: topY),

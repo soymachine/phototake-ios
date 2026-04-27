@@ -50,7 +50,7 @@ final class CameraSession: NSObject, ObservableObject {
             x: 1.0 - viewPoint.y / viewSize.height,
             y: viewPoint.x / viewSize.width
         )
-        sessionQueue.async {
+        sessionQueue.async { [weak self] in
             guard (try? device.lockForConfiguration()) != nil else { return }
             if device.isFocusPointOfInterestSupported && device.isFocusModeSupported(.autoFocus) {
                 device.focusPointOfInterest = devicePoint
@@ -61,6 +61,10 @@ final class CameraSession: NSObject, ObservableObject {
                 device.exposureMode = .autoExpose
             }
             device.unlockForConfiguration()
+            // Return to continuous AF after 3 s so the preview keeps tracking
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                self?.resetToContinuousAutoFocus()
+            }
         }
     }
 
@@ -103,8 +107,35 @@ final class CameraSession: NSObject, ObservableObject {
         }
 
         session.commitConfiguration()
+
+        // Enable continuous autofocus so the preview stays sharp at any distance
+        if let dev = captureDevice {
+            try? dev.lockForConfiguration()
+            if dev.isFocusModeSupported(.continuousAutoFocus) {
+                dev.focusMode = .continuousAutoFocus
+            }
+            if dev.isExposureModeSupported(.continuousAutoExposure) {
+                dev.exposureMode = .continuousAutoExposure
+            }
+            dev.unlockForConfiguration()
+        }
+
         session.startRunning()
         DispatchQueue.main.async { self.isRunning = true }
+    }
+
+    private func resetToContinuousAutoFocus() {
+        sessionQueue.async { [weak self] in
+            guard let device = self?.captureDevice else { return }
+            try? device.lockForConfiguration()
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            device.unlockForConfiguration()
+        }
     }
 }
 
