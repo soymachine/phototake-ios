@@ -8,9 +8,7 @@ final class CameraSession: NSObject, ObservableObject {
     private let photoOutput = AVCapturePhotoOutput()
     private let sessionQueue = DispatchQueue(label: "camera.session", qos: .userInitiated)
 
-    // Preview (MTKView) — set by CameraPreviewView
-    var onFrame: ((CVPixelBuffer) -> Void)?
-    // Detection + loupe — set by ScanView
+    // Detection — set by ScanView
     var onProcessingFrame: ((CVPixelBuffer) -> Void)?
 
     @Published var isRunning = false
@@ -146,7 +144,6 @@ extension CameraSession: AVCaptureVideoDataOutputSampleBufferDelegate {
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         guard let buf = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        onFrame?(buf)
         onProcessingFrame?(buf)
     }
 }

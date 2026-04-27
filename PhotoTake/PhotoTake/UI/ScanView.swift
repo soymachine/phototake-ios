@@ -68,7 +68,7 @@ struct ScanView: View {
         GeometryReader { geo in
             Color.black
 
-            CameraPreviewView(session: cameraSession, ciContext: ciContext)
+            CameraPreviewView(session: cameraSession)
                 .onAppear {
                     overlaySize = geo.size
                     safeAreaInsets = geo.safeAreaInsets
