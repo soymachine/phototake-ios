@@ -131,7 +131,7 @@ final class CameraSession: NSObject, ObservableObject {
 
         #if DEBUG
         let vd = device.activeFormat.formatDescription.dimensions
-        let pd = photoMaxDims
+        let pd = maxPhotoDims
         let cafOK = device.isFocusModeSupported(.continuousAutoFocus)
         let poiOK = device.isFocusPointOfInterestSupported
         let preset = session.sessionPreset.rawValue.components(separatedBy: ".").last ?? "?"
