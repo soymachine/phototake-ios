@@ -19,6 +19,7 @@ final class CameraSession: NSObject, ObservableObject {
 
     private var photoCaptureCompletion: ((CIImage?) -> Void)?
     private var captureDevice: AVCaptureDevice?
+    private var focusObserver: NSKeyValueObservation?
 
     func start() {
         sessionQueue.async { [weak self] in self?.configure() }
@@ -45,7 +46,6 @@ final class CameraSession: NSObject, ObservableObject {
 
     func focus(at viewPoint: CGPoint, in viewSize: CGSize) {
         guard let device = captureDevice else { return }
-        // Direct normalized coords — AVCaptureVideoPreviewLayer handles visual rotation
         let pt = CGPoint(
             x: max(0, min(1, viewPoint.x / viewSize.width)),
             y: max(0, min(1, viewPoint.y / viewSize.height))
@@ -55,14 +55,15 @@ final class CameraSession: NSObject, ObservableObject {
             if device.isFocusPointOfInterestSupported {
                 device.focusPointOfInterest = pt
             }
-            if device.isFocusModeSupported(.continuousAutoFocus) {
-                device.focusMode = .continuousAutoFocus
+            // One-shot .autoFocus does an active focus sweep at the tapped point
+            if device.isFocusModeSupported(.autoFocus) {
+                device.focusMode = .autoFocus
             }
             if device.isExposurePointOfInterestSupported {
                 device.exposurePointOfInterest = pt
             }
-            if device.isExposureModeSupported(.continuousAutoExposure) {
-                device.exposureMode = .continuousAutoExposure
+            if device.isExposureModeSupported(.autoExpose) {
+                device.exposureMode = .autoExpose
             }
             device.unlockForConfiguration()
         }
@@ -153,7 +154,7 @@ final class CameraSession: NSObject, ObservableObject {
         let locked = (try? device.lockForConfiguration()) != nil
         #if DEBUG
         DispatchQueue.main.async {
-            self.debugInfo = (self.debugInfo.replacingOccurrences(of: " | AF pending…", with: ""))
+            self.debugInfo = self.debugInfo.replacingOccurrences(of: " | AF…", with: "")
                 + " | lock:\(locked) mode:\(device.focusMode.rawValue)"
         }
         #endif
@@ -164,12 +165,38 @@ final class CameraSession: NSObject, ObservableObject {
         if device.isExposureModeSupported(.continuousAutoExposure) {
             device.exposureMode = .continuousAutoExposure
         }
+        device.isSubjectAreaChangeMonitoringEnabled = true
         #if DEBUG
         DispatchQueue.main.async {
             self.debugInfo += "→\(device.focusMode.rawValue)"
         }
         #endif
         device.unlockForConfiguration()
+
+        // KVO: show whether the lens is physically moving
+        focusObserver = device.observe(\.isAdjustingFocus, options: .new) { [weak self] dev, _ in
+            #if DEBUG
+            DispatchQueue.main.async {
+                var base = self?.debugInfo ?? ""
+                if let r = base.range(of: " |adj:") {
+                    base.removeSubrange(r.lowerBound ..< base.endIndex)
+                }
+                self?.debugInfo = base + " |adj:\(dev.isAdjustingFocus ? "Y" : "N")"
+            }
+            #endif
+        }
+
+        // When scene shifts significantly, re-engage CAF at center
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(subjectAreaDidChange),
+            name: AVCaptureDevice.subjectAreaDidChangeNotification,
+            object: device
+        )
+    }
+
+    @objc private func subjectAreaDidChange(_ note: Notification) {
+        sessionQueue.async { [weak self] in self?.enableContinuousAF() }
     }
 
     // Find a true video format (≥60fps = not a photo-mode format) with the best
