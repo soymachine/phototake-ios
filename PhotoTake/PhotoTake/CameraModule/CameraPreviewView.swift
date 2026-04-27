@@ -8,14 +8,17 @@ struct CameraPreviewView: UIViewRepresentable {
         let view = PreviewLayerView()
         view.videoPreviewLayer.session = session.session
         view.videoPreviewLayer.videoGravity = .resizeAspectFill
-        if let conn = view.videoPreviewLayer.connection,
-           conn.isVideoRotationAngleSupported(90) {
-            conn.videoRotationAngle = 90
-        }
         return view
     }
 
-    func updateUIView(_ uiView: PreviewLayerView, context: Context) {}
+    func updateUIView(_ uiView: PreviewLayerView, context: Context) {
+        // Connection is nil until the session has inputs; apply rotation once it exists.
+        if let conn = uiView.videoPreviewLayer.connection,
+           conn.isVideoRotationAngleSupported(90),
+           conn.videoRotationAngle != 90 {
+            conn.videoRotationAngle = 90
+        }
+    }
 }
 
 final class PreviewLayerView: UIView {
