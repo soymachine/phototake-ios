@@ -17,6 +17,7 @@ final class CameraSession: NSObject, ObservableObject {
     @Published var error: CameraError?
 
     private var photoCaptureCompletion: ((CIImage?) -> Void)?
+    private var captureDevice: AVCaptureDevice?
 
     func start() {
         sessionQueue.async { [weak self] in self?.configure() }
@@ -40,6 +41,29 @@ final class CameraSession: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Focus
+
+    func focus(at viewPoint: CGPoint, in viewSize: CGSize) {
+        guard let device = captureDevice else { return }
+        // Map portrait view coords → landscape sensor coords (videoRotationAngle = 90)
+        let devicePoint = CGPoint(
+            x: 1.0 - viewPoint.y / viewSize.height,
+            y: viewPoint.x / viewSize.width
+        )
+        sessionQueue.async {
+            guard (try? device.lockForConfiguration()) != nil else { return }
+            if device.isFocusPointOfInterestSupported && device.isFocusModeSupported(.autoFocus) {
+                device.focusPointOfInterest = devicePoint
+                device.focusMode = .autoFocus
+            }
+            if device.isExposurePointOfInterestSupported && device.isExposureModeSupported(.autoExpose) {
+                device.exposurePointOfInterest = devicePoint
+                device.exposureMode = .autoExpose
+            }
+            device.unlockForConfiguration()
+        }
+    }
+
     private func configure() {
         guard !session.isRunning else { return }
 
@@ -51,6 +75,8 @@ final class CameraSession: NSObject, ObservableObject {
             DispatchQueue.main.async { self.error = .deviceUnavailable }
             return
         }
+
+        captureDevice = device
 
         session.beginConfiguration()
         if session.canAddInput(input) { session.addInput(input) }

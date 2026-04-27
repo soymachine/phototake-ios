@@ -52,6 +52,10 @@ struct ScanView: View {
     @State private var capturedNormalizedCorners: [CGPoint] = []
     @State private var capturedPreviewUIImage: UIImage?
 
+    // Focus indicator
+    @State private var focusIndicatorPoint: CGPoint? = nil
+    @State private var safeAreaInsets: EdgeInsets = .init()
+
     // Navigation
     @State private var showCrop     = false
     @State private var showEdit     = false
@@ -67,10 +71,20 @@ struct ScanView: View {
             CameraPreviewView(session: cameraSession, ciContext: ciContext)
                 .onAppear {
                     overlaySize = geo.size
+                    safeAreaInsets = geo.safeAreaInsets
                     cameraSession.start()
                     setupFrameProcessing()
                 }
                 .onChange(of: geo.size) { _, s in overlaySize = s }
+
+            // Tap-to-focus layer (below all controls, above camera)
+            if capturedPreviewUIImage == nil {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(coordinateSpace: .local) { location in
+                        focusAt(location, viewSize: geo.size)
+                    }
+            }
 
             // Detection quad — visual only
             if hasDetection && capturedPreviewUIImage == nil {
@@ -94,6 +108,13 @@ struct ScanView: View {
                 scanCountBadge
                     .position(x: geo.size.width / 2,
                               y: geo.safeAreaInsets.top + 16)
+            }
+
+            // Focus indicator
+            if let fp = focusIndicatorPoint {
+                FocusIndicator()
+                    .position(fp)
+                    .allowsHitTesting(false)
             }
 
             // Mode selector + shutter bar at bottom
@@ -337,9 +358,46 @@ struct ScanView: View {
     }
 
     private var fullFrameCorners: [CGPoint] {
-        let s = overlaySize, i: CGFloat = 24
-        return [CGPoint(x: i, y: i), CGPoint(x: s.width-i, y: i),
-                CGPoint(x: s.width-i, y: s.height-i), CGPoint(x: i, y: s.height-i)]
+        let s = overlaySize
+        let topY    = safeAreaInsets.top + 80      // below badges / dynamic island
+        let bottomY = s.height - safeAreaInsets.bottom - 130  // above shutter bar + home indicator
+        let sideX: CGFloat = 32
+        return [
+            CGPoint(x: sideX,          y: topY),
+            CGPoint(x: s.width - sideX, y: topY),
+            CGPoint(x: s.width - sideX, y: bottomY),
+            CGPoint(x: sideX,          y: bottomY)
+        ]
+    }
+
+    // MARK: - Focus
+
+    private func focusAt(_ point: CGPoint, viewSize: CGSize) {
+        focusIndicatorPoint = point
+        cameraSession.focus(at: point, in: viewSize)
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            withAnimation(.easeOut(duration: 0.3)) { focusIndicatorPoint = nil }
+        }
+    }
+}
+
+// MARK: - Focus indicator
+
+private struct FocusIndicator: View {
+    @State private var scale: CGFloat = 1.4
+    @State private var opacity: Double = 1.0
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 2)
+            .stroke(Color.yellow, lineWidth: 1.5)
+            .frame(width: 72, height: 72)
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.25)) { scale = 1.0 }
+                withAnimation(.easeIn(duration: 0.4).delay(1.0)) { opacity = 0.0 }
+            }
     }
 }
 
