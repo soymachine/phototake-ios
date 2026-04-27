@@ -141,7 +141,7 @@ final class CameraSession: NSObject, ObservableObject {
     }
 
     // Find format with the highest photo resolution that also provides ≥1080p video
-    private func bestPhotoVideoFormat(for device: AVCaptureDevice) -> AVCaptureDeviceFormat? {
+    private func bestPhotoVideoFormat(for device: AVCaptureDevice) -> AVCaptureDevice.Format? {
         device.formats
             .filter { fmt in
                 guard fmt.mediaType == .video else { return false }
