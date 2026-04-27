@@ -42,26 +42,26 @@ final class CameraSession: NSObject, ObservableObject {
 
     func focus(at viewPoint: CGPoint, in viewSize: CGSize) {
         guard let device = captureDevice else { return }
-        let devicePoint = CGPoint(
-            x: 1.0 - viewPoint.y / viewSize.height,
-            y: viewPoint.x / viewSize.width
+        // Direct normalized coords — AVCaptureVideoPreviewLayer handles visual rotation
+        let pt = CGPoint(
+            x: max(0, min(1, viewPoint.x / viewSize.width)),
+            y: max(0, min(1, viewPoint.y / viewSize.height))
         )
-        sessionQueue.async { [weak self] in
-            do {
-                try device.lockForConfiguration()
-                if device.isFocusPointOfInterestSupported && device.isFocusModeSupported(.autoFocus) {
-                    device.focusPointOfInterest = devicePoint
-                    device.focusMode = .autoFocus
-                }
-                if device.isExposurePointOfInterestSupported && device.isExposureModeSupported(.autoExpose) {
-                    device.exposurePointOfInterest = devicePoint
-                    device.exposureMode = .autoExpose
-                }
-                device.unlockForConfiguration()
-            } catch {}
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                self?.resetToContinuousAutoFocus()
+        sessionQueue.async {
+            guard (try? device.lockForConfiguration()) != nil else { return }
+            if device.isFocusPointOfInterestSupported {
+                device.focusPointOfInterest = pt
             }
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            if device.isExposurePointOfInterestSupported {
+                device.exposurePointOfInterest = pt
+            }
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            device.unlockForConfiguration()
         }
     }
 
@@ -123,21 +123,25 @@ final class CameraSession: NSObject, ObservableObject {
         }
 
         session.commitConfiguration()
-
-        // Enable continuous AF/AE so the preview tracks focus at any distance
-        do {
-            try device.lockForConfiguration()
-            if device.isFocusModeSupported(.continuousAutoFocus) {
-                device.focusMode = .continuousAutoFocus
-            }
-            if device.isExposureModeSupported(.continuousAutoExposure) {
-                device.exposureMode = .continuousAutoExposure
-            }
-            device.unlockForConfiguration()
-        } catch {}
-
         session.startRunning()
         DispatchQueue.main.async { self.isRunning = true }
+
+        // Enable continuous AF after the session is fully running
+        sessionQueue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.enableContinuousAF()
+        }
+    }
+
+    private func enableContinuousAF() {
+        guard let device = captureDevice,
+              (try? device.lockForConfiguration()) != nil else { return }
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+        if device.isExposureModeSupported(.continuousAutoExposure) {
+            device.exposureMode = .continuousAutoExposure
+        }
+        device.unlockForConfiguration()
     }
 
     // Find format with the highest photo resolution that also provides ≥1080p video
@@ -165,21 +169,6 @@ final class CameraSession: NSObject, ObservableObject {
             }
     }
 
-    private func resetToContinuousAutoFocus() {
-        sessionQueue.async { [weak self] in
-            guard let device = self?.captureDevice else { return }
-            do {
-                try device.lockForConfiguration()
-                if device.isFocusModeSupported(.continuousAutoFocus) {
-                    device.focusMode = .continuousAutoFocus
-                }
-                if device.isExposureModeSupported(.continuousAutoExposure) {
-                    device.exposureMode = .continuousAutoExposure
-                }
-                device.unlockForConfiguration()
-            } catch {}
-        }
-    }
 }
 
 // MARK: - Video delegate
